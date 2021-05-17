@@ -65,7 +65,7 @@ fn get_corp_act( cact: &CorpAction ) -> &'static str
 
 fn main() {
   // get pyth mapping account
-  let url = "http://devnet.solana.com:8899";
+  let url = "https://devnet.solana.com";
   let key = "ArppEFcsybCLE8CRtQJLQ9tLv2peGmQoKWFuiUWm4KBP";
   let clnt = RpcClient::new( url.to_string() );
   let mut akey = Pubkey::from_str( key ).unwrap();
