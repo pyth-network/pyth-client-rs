@@ -7,11 +7,12 @@ use pyth_client::{
   Product,
   Price,
   PriceType,
+  DeriveType,
   PriceStatus,
   CorpAction,
   cast,
   MAGIC,
-  VERSION_1,
+  VERSION_2,
   PROD_HDR_SIZE
 };
 use solana_client::{
@@ -41,8 +42,6 @@ fn get_price_type( ptype: &PriceType ) -> &'static str
   match ptype {
     PriceType::Unknown    => "unknown",
     PriceType::Price      => "price",
-    PriceType::TWAP       => "twap",
-    PriceType::Volatility => "volatility",
   }
 }
 
@@ -66,7 +65,7 @@ fn get_corp_act( cact: &CorpAction ) -> &'static str
 fn main() {
   // get pyth mapping account
   let url = "http://api.devnet.solana.com";
-  let key = "ArppEFcsybCLE8CRtQJLQ9tLv2peGmQoKWFuiUWm4KBP";
+  let key = "BmA9Z6FjioHJPpjT39QazZyhDRUdZy2ezwx4GiDdE2u2";
   let clnt = RpcClient::new( url.to_string() );
   let mut akey = Pubkey::from_str( key ).unwrap();
 
@@ -77,7 +76,7 @@ fn main() {
     assert_eq!( map_acct.magic, MAGIC, "not a valid pyth account" );
     assert_eq!( map_acct.atype, AccountType::Mapping as u32,
                 "not a valid pyth mapping account" );
-    assert_eq!( map_acct.ver, VERSION_1,
+    assert_eq!( map_acct.ver, VERSION_2,
                 "unexpected pyth mapping account version" );
 
     // iget and print each Product in Mapping directory
@@ -89,7 +88,7 @@ fn main() {
       assert_eq!( prod_acct.magic, MAGIC, "not a valid pyth account" );
       assert_eq!( prod_acct.atype, AccountType::Product as u32,
                   "not a valid pyth product account" );
-      assert_eq!( prod_acct.ver, VERSION_1,
+      assert_eq!( prod_acct.ver, VERSION_2,
                   "unexpected pyth product account version" );
 
       // print key and reference data for this Product
@@ -112,7 +111,7 @@ fn main() {
           assert_eq!( pa.magic, MAGIC, "not a valid pyth account" );
           assert_eq!( pa.atype, AccountType::Price as u32,
                      "not a valid pyth price account" );
-          assert_eq!( pa.ver, VERSION_1,
+          assert_eq!( pa.ver, VERSION_2,
                       "unexpected pyth price account version" );
           println!( "  price_account .. {:?}", px_pkey );
           println!( "    price_type ... {}", get_price_type(&pa.ptype));
@@ -123,6 +122,10 @@ fn main() {
           println!( "    conf ......... {}", pa.agg.conf );
           println!( "    valid_slot ... {}", pa.valid_slot );
           println!( "    publish_slot . {}", pa.agg.pub_slot );
+          println!( "    twap ......... {}",
+                    pa.drv[(DeriveType::TWAP as usize)-1] );
+          println!( "    volatility ... {}",
+                    pa.drv[(DeriveType::Volatility as usize)-1] );
 
           // go to next price account in list
           if pa.next.is_valid() {
@@ -146,3 +149,4 @@ fn main() {
     akey = Pubkey::new( &map_acct.next.val );
   }
 }
+

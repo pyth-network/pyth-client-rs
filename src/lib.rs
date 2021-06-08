@@ -1,6 +1,6 @@
 pub const MAGIC          : u32   = 0xa1b2c3d4;
-pub const VERSION_1      : u32   = 1;
-pub const VERSION        : u32   = VERSION_1;
+pub const VERSION_2      : u32   = 2;
+pub const VERSION        : u32   = VERSION_2;
 pub const MAP_TABLE_SIZE : usize = 640;
 pub const PROD_ACCT_SIZE : usize = 512;
 pub const PROD_HDR_SIZE  : usize = 48;
@@ -39,7 +39,14 @@ pub enum CorpAction
 pub enum PriceType
 {
   Unknown,
-  Price,
+  Price
+}
+
+// different types of calculations derived from aggregate price
+#[repr(C)]
+pub enum DeriveType
+{
+  Unknown,
   TWAP,
   Volatility
 }
@@ -111,11 +118,12 @@ pub struct Price
   pub unused     : u32,
   pub curr_slot  : u64,        // currently accumulating price slot
   pub valid_slot : u64,        // valid slot-time of agg. price
+  pub drv        : [i64;8],    // calculated values derived from agg. price
   pub prod       : AccKey,     // product account key
   pub next       : AccKey,     // next Price account in linked list
   pub agg_pub    : AccKey,     // quoter who computed last aggregate price
   pub agg        : PriceInfo,  // aggregate price info
-  pub comp       : [PriceComp;16] // price components one per quoter
+  pub comp       : [PriceComp;32] // price components one per quoter
 }
 
 struct AccKeyU64
