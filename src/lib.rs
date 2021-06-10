@@ -42,15 +42,6 @@ pub enum PriceType
   Price
 }
 
-// different types of calculations derived from aggregate price
-#[repr(C)]
-pub enum DeriveType
-{
-  Unknown,
-  TWAP,
-  Volatility
-}
-
 // solana public key
 #[repr(C)]
 pub struct AccKey
@@ -118,7 +109,14 @@ pub struct Price
   pub unused     : u32,
   pub curr_slot  : u64,        // currently accumulating price slot
   pub valid_slot : u64,        // valid slot-time of agg. price
-  pub drv        : [i64;8],    // calculated values derived from agg. price
+  pub twap       : i64,        // time-weighted average price
+  pub avol       : u64,        // annualized price volatility
+  pub drv0       : i64,        // space for future derived values
+  pub drv1       : i64,        // space for future derived values
+  pub drv2       : i64,        // space for future derived values
+  pub drv3       : i64,        // space for future derived values
+  pub drv4       : i64,        // space for future derived values
+  pub drv5       : i64,        // space for future derived values
   pub prod       : AccKey,     // product account key
   pub next       : AccKey,     // next Price account in linked list
   pub agg_pub    : AccKey,     // quoter who computed last aggregate price

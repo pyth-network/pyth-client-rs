@@ -7,7 +7,6 @@ use pyth_client::{
   Product,
   Price,
   PriceType,
-  DeriveType,
   PriceStatus,
   CorpAction,
   cast,
@@ -122,10 +121,8 @@ fn main() {
           println!( "    conf ......... {}", pa.agg.conf );
           println!( "    valid_slot ... {}", pa.valid_slot );
           println!( "    publish_slot . {}", pa.agg.pub_slot );
-          println!( "    twap ......... {}",
-                    pa.drv[(DeriveType::TWAP as usize)-1] );
-          println!( "    volatility ... {}",
-                    pa.drv[(DeriveType::Volatility as usize)-1] );
+          println!( "    twap ......... {}", pa.twap );
+          println!( "    volatility ... {}", pa.avol );
 
           // go to next price account in list
           if pa.next.is_valid() {
