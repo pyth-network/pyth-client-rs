@@ -90,9 +90,9 @@ pub struct PriceInfo
 #[repr(C)]
 pub struct PriceComp
 {
-  publisher  : AccKey,         // key of contributing quoter
-  agg        : PriceInfo,      // contributing price to last aggregate
-  latest     : PriceInfo       // latest contributing price (not in agg.)
+  pub publisher  : AccKey,         // key of contributing quoter
+  pub agg        : PriceInfo,      // contributing price to last aggregate
+  pub latest     : PriceInfo       // latest contributing price (not in agg.)
 }
 
 // Price account structure
