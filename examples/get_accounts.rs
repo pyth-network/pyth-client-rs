@@ -121,8 +121,8 @@ fn main() {
           println!( "    conf ......... {}", pa.agg.conf );
           println!( "    valid_slot ... {}", pa.valid_slot );
           println!( "    publish_slot . {}", pa.agg.pub_slot );
-          println!( "    twap ......... {}", pa.twap );
-          println!( "    volatility ... {}", pa.avol );
+          println!( "    twap ......... {}", pa.twap.val );
+          println!( "    twac ......... {}", pa.twac.val );
 
           // go to next price account in list
           if pa.next.is_valid() {

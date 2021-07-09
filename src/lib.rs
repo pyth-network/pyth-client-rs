@@ -95,6 +95,14 @@ pub struct PriceComp
   latest     : PriceInfo       // latest contributing price (not in agg.)
 }
 
+#[repr(C)]
+pub struct Ema
+{
+  pub val         : i64,       // current value of ema
+  numer           : i64,       // numerator state for next update
+  denom           : i64        // denominator state for next update
+}
+
 // Price account structure
 #[repr(C)]
 pub struct Price
@@ -107,19 +115,18 @@ pub struct Price
   pub expo       : i32,        // price exponent
   pub num        : u32,        // number of component prices
   pub unused     : u32,
-  pub curr_slot  : u64,        // currently accumulating price slot
+  pub last_slot  : u64,        // slot of last valid (not unknown) aggregate price
   pub valid_slot : u64,        // valid slot-time of agg. price
-  pub twap       : i64,        // time-weighted average price
-  pub avol       : u64,        // annualized price volatility
-  pub drv0       : i64,        // space for future derived values
+  pub twap       : Ema,        // time-weighted average price
+  pub twac       : Ema,        // time-weighted average confidence interval
   pub drv1       : i64,        // space for future derived values
   pub drv2       : i64,        // space for future derived values
-  pub drv3       : i64,        // space for future derived values
-  pub drv4       : i64,        // space for future derived values
-  pub drv5       : i64,        // space for future derived values
   pub prod       : AccKey,     // product account key
   pub next       : AccKey,     // next Price account in linked list
-  pub agg_pub    : AccKey,     // quoter who computed last aggregate price
+  pub prev_slot  : u64,        // valid slot of previous update
+  pub prev_price : i64,        // aggregate price of previous update
+  pub prev_conf  : u64,        // confidence interval of previous update
+  pub drv3       : i64,        // space for future derived values
   pub agg        : PriceInfo,  // aggregate price info
   pub comp       : [PriceComp;32] // price components one per quoter
 }
