@@ -119,6 +119,7 @@ fn main() {
           println!( "    corp_act ..... {}", get_corp_act(&pa.agg.corp_act));
           println!( "    price ........ {}", pa.agg.price );
           println!( "    conf ......... {}", pa.agg.conf );
+          println!( "    num_qt ....... {}", pa.num_qt );
           println!( "    valid_slot ... {}", pa.valid_slot );
           println!( "    publish_slot . {}", pa.agg.pub_slot );
           println!( "    twap ......... {}", pa.twap.val );

@@ -90,17 +90,17 @@ pub struct PriceInfo
 #[repr(C)]
 pub struct PriceComp
 {
-  publisher  : AccKey,         // key of contributing quoter
-  agg        : PriceInfo,      // contributing price to last aggregate
-  latest     : PriceInfo       // latest contributing price (not in agg.)
+  pub publisher  : AccKey,     // key of contributing quoter
+  pub agg        : PriceInfo,  // contributing price to last aggregate
+  pub latest     : PriceInfo   // latest contributing price (not in agg.)
 }
 
 #[repr(C)]
 pub struct Ema
 {
-  pub val         : i64,       // current value of ema
-  numer           : i64,       // numerator state for next update
-  denom           : i64        // denominator state for next update
+  pub val        : i64,        // current value of ema
+  numer          : i64,        // numerator state for next update
+  denom          : i64         // denominator state for next update
 }
 
 // Price account structure
@@ -114,7 +114,7 @@ pub struct Price
   pub ptype      : PriceType,  // price or calculation type
   pub expo       : i32,        // price exponent
   pub num        : u32,        // number of component prices
-  pub unused     : u32,
+  pub num_qt     : u32,        // number of quoters that make up aggregate
   pub last_slot  : u64,        // slot of last valid (not unknown) aggregate price
   pub valid_slot : u64,        // valid slot-time of agg. price
   pub twap       : Ema,        // time-weighted average price
