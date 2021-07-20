@@ -99,8 +99,8 @@ pub struct PriceComp
 pub struct Ema
 {
   pub val        : i64,        // current value of ema
-  numer          : i64,        // numerator state for next update
-  denom          : i64         // denominator state for next update
+  pub numer      : i64,        // numerator state for next update
+  pub denom      : i64         // denominator state for next update
 }
 
 // Price account structure
