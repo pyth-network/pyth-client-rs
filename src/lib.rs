@@ -131,6 +131,27 @@ pub struct Price
   pub comp       : [PriceComp;32] // price components one per quoter
 }
 
+impl Price {
+  /**
+   * Get the current price and confidence interval as fixed-point numbers. Returns a triple of
+   * the current price, confidence interval, and the exponent for both numbers (i.e., the number
+   * of decimal places.
+   * For example:
+   *
+   * get_current_price() -> Some((12345, 267, -2)) // represents 123.45 +- 2.67
+   * get_current_price() -> Some((123, 1, 2)) // represents 12300 +- 100
+   *
+   * Returns None if price information is currently unavailable.
+   */
+  pub fn get_current_price(&self) -> Option<(i64, u64, i32)> {
+    if !matches!(self.agg.status, PriceStatus::Trading) {
+      None
+    } else {
+      Some((self.agg.price, self.agg.conf, self.expo))
+    }
+  }
+}
+
 struct AccKeyU64
 {
   pub val: [u64;4]
