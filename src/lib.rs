@@ -135,7 +135,7 @@ impl Price {
   /**
    * Get the current price and confidence interval as fixed-point numbers. Returns a triple of
    * the current price, confidence interval, and the exponent for both numbers (i.e., the number
-   * of decimal places.
+   * of decimal places.)
    * For example:
    *
    * get_current_price() -> Some((12345, 267, -2)) // represents 123.45 +- 2.67
