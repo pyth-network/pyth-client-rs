@@ -107,18 +107,30 @@ fn main() {
         loop {
           let pd = clnt.get_account_data( &px_pkey ).unwrap();
           let pa = cast::<Price>( &pd );
+
+          let maybe_price = pa.get_current_price();
           assert_eq!( pa.magic, MAGIC, "not a valid pyth account" );
           assert_eq!( pa.atype, AccountType::Price as u32,
                      "not a valid pyth price account" );
           assert_eq!( pa.ver, VERSION_2,
                       "unexpected pyth price account version" );
           println!( "  price_account .. {:?}", px_pkey );
+          match maybe_price {
+            Some((price, confidence, _)) => {
+              println!("    price ........ {}", price);
+              println!("    conf ......... {}", confidence);
+            }
+            None => {
+              println!("    price ........ unavailable");
+              println!("    conf ......... unavailable");
+            }
+          }
+
           println!( "    price_type ... {}", get_price_type(&pa.ptype));
           println!( "    exponent ..... {}", pa.expo );
           println!( "    status ....... {}", get_status(&pa.agg.status));
           println!( "    corp_act ..... {}", get_corp_act(&pa.agg.corp_act));
-          println!( "    price ........ {}", pa.agg.price );
-          println!( "    conf ......... {}", pa.agg.conf );
+
           println!( "    num_qt ....... {}", pa.num_qt );
           println!( "    valid_slot ... {}", pa.valid_slot );
           println!( "    publish_slot . {}", pa.agg.pub_slot );
