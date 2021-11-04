@@ -108,17 +108,18 @@ fn main() {
           let pd = clnt.get_account_data( &px_pkey ).unwrap();
           let pa = cast::<Price>( &pd );
 
-          let maybe_price = pa.get_current_price();
           assert_eq!( pa.magic, MAGIC, "not a valid pyth account" );
           assert_eq!( pa.atype, AccountType::Price as u32,
                      "not a valid pyth price account" );
           assert_eq!( pa.ver, VERSION_2,
                       "unexpected pyth price account version" );
           println!( "  price_account .. {:?}", px_pkey );
+
+          let maybe_price = pa.get_current_price();
           match maybe_price {
-            Some((price, confidence, _)) => {
-              println!("    price ........ {}", price);
-              println!("    conf ......... {}", confidence);
+            Some((price, confidence, expo)) => {
+              println!("    price ........ {} x 10^{}", price, expo);
+              println!("    conf ......... {} x 10^{}", confidence, expo);
             }
             None => {
               println!("    price ........ unavailable");
@@ -134,7 +135,17 @@ fn main() {
           println!( "    num_qt ....... {}", pa.num_qt );
           println!( "    valid_slot ... {}", pa.valid_slot );
           println!( "    publish_slot . {}", pa.agg.pub_slot );
-          println!( "    twap ......... {}", pa.twap.val );
+
+          let maybe_twap = pa.get_twap();
+          match maybe_twap {
+            Some((twap, expo)) => {
+              println!( "    twap ......... {} x 10^{}", twap, expo );
+            }
+            None => {
+              println!( "    twap ......... unavailable");
+            }
+          }
+
           println!( "    twac ......... {}", pa.twac.val );
 
           // go to next price account in list
