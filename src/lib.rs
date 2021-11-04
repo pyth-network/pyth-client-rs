@@ -133,10 +133,9 @@ pub struct Price
 
 impl Price {
   /**
-   * Get the current price and confidence interval as fixed-point numbers. Returns a triple of
-   * the current price, confidence interval, and the exponent for both numbers (i.e., the number
-   * of decimal places.)
-   * For example:
+   * Get the current price and confidence interval as fixed-point numbers of the form a * 10^e.
+   * Returns a triple of the current price, confidence interval, and the exponent for both
+   * numbers. For example:
    *
    * get_current_price() -> Some((12345, 267, -2)) // represents 123.45 +- 2.67
    * get_current_price() -> Some((123, 1, 2)) // represents 12300 +- 100
@@ -149,6 +148,20 @@ impl Price {
     } else {
       Some((self.agg.price, self.agg.conf, self.expo))
     }
+  }
+
+  /**
+   * Get the time-weighted average price (TWAP) as a fixed point number of the form a * 10^e.
+   * Returns a tuple of the current twap and its exponent. For example:
+   *
+   * get_twap() -> Some((123, -2)) // represents 1.23
+   * get_twap() -> Some((45, 3)) // represents 45000
+   *
+   * Returns None if the twap is currently unavailable.
+   */
+  pub fn get_twap(&self) -> Option<(i64, i32)> {
+    // This method currently cannot return None, but may do so in the future.
+    Some((self.twap.val, self.expo))
   }
 }
 
