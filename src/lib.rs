@@ -6,6 +6,11 @@ pub const PROD_ACCT_SIZE : usize = 512;
 pub const PROD_HDR_SIZE  : usize = 48;
 pub const PROD_ATTR_SIZE : usize = PROD_ACCT_SIZE - PROD_HDR_SIZE;
 
+const PD_EXPO: i32 = -9;
+const PD_SCALE: u64 = 1000000000;
+const MAX_PD_V_I64: i64 = (1 << 28) - 1;
+const MAX_PD_V_U64: u64 = (1 << 28) - 1;
+
 // each account has its own type
 #[repr(C)]
 pub enum AccountType
@@ -84,6 +89,16 @@ pub struct PriceInfo
   pub status     : PriceStatus,// status of price (Trading is valid)
   pub corp_act   : CorpAction, // notification of any corporate action
   pub pub_slot   : u64
+}
+
+impl PriceInfo {
+  pub fn get_checked(&self) -> Option<(i64, u64)> {
+    if !matches!(self.status, PriceStatus::Trading) {
+      None
+    } else {
+      Some((self.price, self.conf))
+    }
+  }
 }
 
 // latest component price and price used in aggregate snapshot
@@ -180,5 +195,181 @@ impl AccKey
   pub fn is_valid( &self ) -> bool  {
     let k8 = cast::<AccKeyU64>( &self.val );
     return k8.val[0]!=0 || k8.val[1]!=0 || k8.val[2]!=0 || k8.val[3]!=0;
+  }
+}
+
+/**
+ * Given the price accounts for the products X/Z and Y/Z, return the current price for X/Y.
+ * The value returned by this method has the same semantics as Price::get_current_price above.
+ *
+ * `result_expo` determines the exponent of the result, i.e., the number of digits of precision in
+ * the price. For any given base/quote pair, the minimum possible exponent is
+ * `-9 + base.exponent - quote.exponent`.
+ */
+pub fn get_base_in_quote(base: Price, quote: Price, result_expo: i32) -> Option<(i64, u64, i32)> {
+  return rebase_price_info(base.agg, base.expo, quote.agg, quote.expo, result_expo);
+}
+
+// Helper fn for rebase that is extracted for testing purposes.
+fn rebase_price_info(
+  base_info: PriceInfo,
+  base_expo: i32,
+  quote_info: PriceInfo,
+  quote_expo: i32,
+  result_expo: i32,
+) -> Option<(i64, u64, i32)> {
+  return match base_info.get_checked() {
+    Some((base_price, base_confidence)) =>
+      match quote_info.get_checked() {
+        Some((quote_price, quote_confidence)) => {
+          // Note that this assertion implies that the prices can be cast to u64.
+          // We need prices as u64 in order to divide, as solana doesn't implement signed division.
+          // It's also extremely unclear what this method should do if one of the prices is negative,
+          // so assuming positive prices throughout seems fine.
+          assert!(base_price >= 0 && base_price <= MAX_PD_V_I64);
+          assert!(quote_price > 0 && quote_price <= MAX_PD_V_I64);
+          let base_price = base_price as u64;
+          let quote_price = quote_price as u64;
+
+          assert!(base_confidence <= MAX_PD_V_U64);
+          assert!(quote_confidence <= MAX_PD_V_U64);
+
+          println!("base ({} +- {}) * 10^{}", base_price, base_confidence, base_expo);
+          println!("quote ({} +- {}) * 10^{}", quote_price, quote_confidence, quote_expo);
+
+          // Compute the midprice, base in terms of quote.
+          let midprice = (base_price * PD_SCALE) / quote_price;
+          let midprice_expo = PD_EXPO + base_expo - quote_expo;
+          println!("mean {} * 10^{}", midprice, midprice_expo);
+          assert!(result_expo >= midprice_expo);
+
+          // Compute the confidence interval.
+          // This code uses the 1-norm instead of the 2-norm for computational reasons.
+          // The correct formula is midprice * sqrt(c_1^2 + c_2^2), where c_1 and c_2 are the
+          // confidence intervals in price-percentage terms of the base and quote. This quantity
+          // is difficult to compute due to the sqrt, and overflow/underflow considerations.
+          // Instead, this code uses midprice * (c_1 + c_2).
+          // This quantity is at most a factor of sqrt(2) greater than the correct result, which
+          // shouldn't matter considering that confidence intervals are typically ~0.1% of the price.
+
+          // The exponent is PD_EXPO for both of these.
+          let base_confidence_pct = (base_confidence * PD_SCALE) / base_price;
+          let quote_confidence_pct = (quote_confidence * PD_SCALE) / quote_price;
+
+          // Need to rescale the numbers to prevent the multiplication from overflowing
+          let (rescaled_z, rescaled_z_expo) = rescale_num(base_confidence_pct + quote_confidence_pct, PD_EXPO);
+          println!("rescaled_z {} * 10^{}", rescaled_z, rescaled_z_expo);
+          let (rescaled_mid, rescaled_mid_expo) = rescale_num(midprice, midprice_expo);
+          println!("rescaled_mean {} * 10^{}", rescaled_mid, rescaled_mid_expo);
+          let conf = (rescaled_z * rescaled_mid);
+          let conf_expo = rescaled_z_expo + rescaled_mid_expo;
+          println!("conf {} * 10^{}", conf, conf_expo);
+
+          // Scale results to the target exponent.
+          let midprice_in_result_expo = scale_to_exponent(midprice, midprice_expo, result_expo);
+          let conf_in_result_expo = scale_to_exponent(conf, conf_expo, result_expo);
+          let midprice_i64 = midprice_in_result_expo as i64;
+          assert!(midprice_i64 >= 0);
+
+          Some((midprice_i64, conf_in_result_expo, result_expo))
+        },
+        None => None,
+      }
+    None => None,
+  }
+}
+
+/** Scale num and its exponent such that it is < MAX_PD_V_U64
+  * (which guarantees that multiplication doesn't overflow).
+  */
+pub fn rescale_num(
+  num: u64,
+  expo: i32,
+) -> (u64, i32) {
+  let mut p: u64 = num;
+  let mut c: i32 = 0;
+
+  while p > MAX_PD_V_U64 {
+    p = p / 10;
+    c += 1;
+  }
+
+  println!("c: {}", c);
+
+  return (p, expo + c);
+}
+
+/** Scale num so that its exponent is target_expo.
+  * This method can only reduce precision, i.e., target_expo must be > current_expo.
+  */
+pub fn scale_to_exponent(
+  num: u64,
+  current_expo: i32,
+  target_expo: i32,
+) -> u64 {
+  let mut delta = target_expo - current_expo;
+  let mut res = num;
+  assert!(delta >= 0);
+
+  while delta > 0 {
+    res /= 10;
+    delta -= 1;
+  }
+
+  return res;
+}
+
+#[cfg(test)]
+mod test {
+  use crate::{Price, PriceStatus, PriceInfo, PriceType, AccountType, MAGIC, VERSION, CorpAction, rebase_price_info, MAX_PD_V_I64, MAX_PD_V_U64};
+
+  fn mock_price_info(price: i64, conf: u64, status: PriceStatus) -> PriceInfo {
+    return PriceInfo {
+      price,
+      conf,
+      status,
+      corp_act: CorpAction::NoCorpAct,
+      pub_slot: 0,
+    }
+  }
+
+  #[test]
+  fn test_rebase() {
+    fn run_test(
+      price1: (i64, u64, i32),
+      price2: (i64, u64, i32),
+      result_expo: i32,
+      expected: (i64, u64),
+    ) {
+      let pinfo1 = mock_price_info(price1.0, price1.1, PriceStatus::Trading);
+      let pinfo2 = mock_price_info(price2.0, price2.1, PriceStatus::Trading);
+      let result = rebase_price_info(pinfo1, price1.2, pinfo2, price2.2, result_expo);
+      assert_eq!(result, Some((expected.0, expected.1, result_expo)));
+    }
+
+    run_test((1, 1, 0), (1, 1, 0), 0, (1, 2));
+    run_test((10, 1, 0), (1, 1, 0), 0, (10, 11));
+    run_test((1, 1, 1), (1, 1, 0), 0, (10, 20));
+    run_test((1, 1, 0), (5, 1, 0), 0, (0, 0));
+    run_test((1, 1, 0), (5, 1, 0), -2, (20, 24));
+
+    // The maximum price / confidence value that can appear in on-chain decimals.
+    run_test((MAX_PD_V_I64, MAX_PD_V_U64, 0), (MAX_PD_V_I64, MAX_PD_V_U64, 0), 0, (1, 2));
+    run_test((MAX_PD_V_I64, MAX_PD_V_U64, 0), (1, 1, 0), 0, (MAX_PD_V_I64, 2 * MAX_PD_V_U64));
+    run_test((1, MAX_PD_V_U64, 0), (1, MAX_PD_V_U64, 0), 0, (1, 2 * MAX_PD_V_U64));
+
+    // Test error cases at
+
+    // TODO: need tests at the edges of the capacity of PD
+
+
+
+    // run_test((100, 1, -2), (1, 1, 0), 1, (2, 1));
+
+
+    // run_test(100, 5, 0, 10, 1, 0, 10, 2, 1);
+
+    // run_test(1000, 1, 0, 100, 1, 0, 10, 1, 0);
+    // run_test(1000, 1, 0, 100, 1, 0, 100, 1, 0);
   }
 }
