@@ -138,15 +138,15 @@ fn main() {
 
           let maybe_twap = pa.get_twap();
           match maybe_twap {
-            Some((twap, expo)) => {
-              println!( "    twap ......... {} x 10^{}", twap, expo );
+            Some(twap) => {
+              println!( "    twap ......... {} x 10^{}", twap.price, twap.expo );
+              println!( "    twac ......... {} x 10^{}", twap.conf, twap.expo );
             }
             None => {
               println!( "    twap ......... unavailable");
+              println!( "    twac ......... unavailable");
             }
           }
-
-          println!( "    twac ......... {}", pa.twac.val );
 
           // go to next price account in list
           if pa.next.is_valid() {

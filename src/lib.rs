@@ -6,6 +6,7 @@ pub const PROD_ACCT_SIZE : usize = 512;
 pub const PROD_HDR_SIZE  : usize = 48;
 pub const PROD_ATTR_SIZE : usize = PROD_ACCT_SIZE - PROD_HDR_SIZE;
 
+// Constants for working with pyth's number representation
 const PD_EXPO: i32 = -9;
 const PD_SCALE: u64 = 1000000000;
 const MAX_PD_V_I64: i64 = (1 << 28) - 1;
@@ -91,16 +92,6 @@ pub struct PriceInfo
   pub pub_slot   : u64
 }
 
-impl PriceInfo {
-  pub fn get_checked(&self) -> Option<(i64, u64)> {
-    if !matches!(self.status, PriceStatus::Trading) {
-      None
-    } else {
-      Some((self.price, self.conf))
-    }
-  }
-}
-
 // latest component price and price used in aggregate snapshot
 #[repr(C)]
 pub struct PriceComp
@@ -149,13 +140,8 @@ pub struct Price
 impl Price {
   /**
    * Get the current price and confidence interval as fixed-point numbers of the form a * 10^e.
-   * Returns a triple of the current price, confidence interval, and the exponent for both
-   * numbers. For example:
-   *
-   * get_current_price() -> Some((12345, 267, -2)) // represents 123.45 +- 2.67
-   * get_current_price() -> Some((123, 1, 2)) // represents 12300 +- 100
-   *
-   * Returns None if price information is currently unavailable.
+   * Returns a struct containing the current price, confidence interval, and the exponent for both
+   * numbers. Returns None if price information is currently unavailable.
    */
   pub fn get_current_price(&self) -> Option<PriceConf> {
     if !matches!(self.agg.status, PriceStatus::Trading) {
@@ -175,11 +161,10 @@ impl Price {
    * this method returns the price of X/Y. Use this method to get the price of e.g., mSOL/SOL from
    * the mSOL/USD and SOL/USD accounts.
    *
-   * The value returned by this method has the same semantics as Price::get_current_price above.
-   *
    * `result_expo` determines the exponent of the result, i.e., the number of digits of precision in
    * the price. For any given base/quote pair, the minimum possible exponent is
-   * `-9 + base.exponent - quote.exponent`.
+   * `-9 + self.exponent - quote.exponent`. (This minimum exponent reflects the maximum possible
+   * precision for the result given the precision of the two inputs and the numeric representation.)
    */
   pub fn get_price_in_quote(&self, quote: Price, result_expo: i32) -> Option<PriceConf> {
     return match self.get_current_price() {
@@ -194,20 +179,32 @@ impl Price {
   }
 
   /**
-   * Get the time-weighted average price (TWAP) as a fixed point number of the form a * 10^e.
-   * Returns a tuple of the current twap and its exponent. For example:
-   *
-   * get_twap() -> Some((123, -2)) // represents 1.23
-   * get_twap() -> Some((45, 3)) // represents 45000
-   *
+   * Get the time-weighted average price (TWAP) and a confidence interval on the result.
    * Returns None if the twap is currently unavailable.
+   *
+   * At the moment, the confidence interval returned by this method is computed in
+   * a somewhat questionable way, so we do not recommend using it for high-value applications.
    */
-  pub fn get_twap(&self) -> Option<(i64, i32)> {
+  pub fn get_twap(&self) -> Option<PriceConf> {
     // This method currently cannot return None, but may do so in the future.
-    Some((self.twap.val, self.expo))
+    // Note that the twac is a positive number in i64, so safe to cast to u64.
+    Some(PriceConf { price: self.twap.val, conf: self.twac.val as u64, expo: self.expo })
   }
 }
 
+
+/**
+ * A price with a degree of uncertainty, represented as a price +- a confidence interval.
+ * The confidence interval roughly corresponds to the standard error of a normal distribution.
+ * Both the price and confidence are stored in a fixed-point numeric representation, `x * 10^expo`,
+ * where `expo` is the exponent. For example:
+ *
+ * ```
+ * use pyth_client::PriceConf;
+ * PriceConf { price: 12345, conf: 267, expo: -2 }; // represents 123.45 +- 2.67
+ * PriceConf { price: 123, conf: 1, expo: 2 }; // represents 12300 +- 100
+ * ```
+ */
 #[derive(PartialEq)]
 #[derive(Debug)]
 pub struct PriceConf {
@@ -218,36 +215,40 @@ pub struct PriceConf {
 
 impl PriceConf {
   /**
-   * Divides this price and confidence interval by y.
+   * Divide this price by `other` while propagating the uncertainty in both prices into the result.
+   * The uncertainty propagation algorithm is an approximation (due to computational limitations)
+   * and may slightly overestimate the resulting uncertainty (by at most a factor of sqrt(2)).
    *
-   * The result is returned with result_exp
+   * `result_expo` determines the exponent of the result. The minimum possible exponent is
+   * `-9 + self.exponent - other.exponent`. (This minimum exponent reflects the maximum possible
+   * precision for the result given the precision of the two inputs and the numeric representation.)
    */
-  pub fn div(&self, quote: PriceConf, result_expo: i32) -> PriceConf {
+  pub fn div(&self, other: PriceConf, result_expo: i32) -> PriceConf {
     // Note that this assertion implies that the prices can be cast to u64.
     // We need prices as u64 in order to divide, as solana doesn't implement signed division.
     // It's also extremely unclear what this method should do if one of the prices is negative,
     // so assuming positive prices throughout seems fine.
-    assert!(self.price >= 0 && self.price <= MAX_PD_V_I64);
-    assert!(quote.price > 0 && quote.price <= MAX_PD_V_I64);
-    let base_price = self.price as u64;
-    let quote_price = quote.price as u64;
+    assert!(self.price > 0);
+    assert!(other.price > 0);
+    let (base_price, base_expo) = PriceConf::rescale_num(self.price as u64, self.expo);
+    let (other_price, other_expo) = PriceConf::rescale_num(other.price as u64, other.expo);
 
     assert!(self.conf <= MAX_PD_V_U64);
-    assert!(quote.conf <= MAX_PD_V_U64);
+    assert!(other.conf <= MAX_PD_V_U64);
 
-    println!("base ({} +- {}) * 10^{}", base_price, self.conf, self.expo);
-    println!("quote ({} +- {}) * 10^{}", quote_price, quote.conf, quote.expo);
+    println!("base ({} +- {}) * 10^{}", base_price, self.conf, base_expo);
+    println!("other ({} +- {}) * 10^{}", other_price, other.conf, other_expo);
 
-    // Compute the midprice, base in terms of quote.
-    let midprice = (base_price * PD_SCALE) / quote_price;
-    let midprice_expo = PD_EXPO + self.expo - quote.expo;
+    // Compute the midprice, base in terms of other.
+    let midprice = (base_price * PD_SCALE) / other_price;
+    let midprice_expo = PD_EXPO + base_expo - other_expo;
     println!("mean {} * 10^{}", midprice, midprice_expo);
     assert!(result_expo >= midprice_expo);
 
     // Compute the confidence interval.
     // This code uses the 1-norm instead of the 2-norm for computational reasons.
     // The correct formula is midprice * sqrt(c_1^2 + c_2^2), where c_1 and c_2 are the
-    // confidence intervals in price-percentage terms of the base and quote. This quantity
+    // confidence intervals in price-percentage terms of the base and other. This quantity
     // is difficult to compute due to the sqrt, and overflow/underflow considerations.
     // Instead, this code uses midprice * (c_1 + c_2).
     // This quantity is at most a factor of sqrt(2) greater than the correct result, which
@@ -255,10 +256,10 @@ impl PriceConf {
 
     // The exponent is PD_EXPO for both of these.
     let base_confidence_pct = (self.conf * PD_SCALE) / base_price;
-    let quote_confidence_pct = (quote.conf * PD_SCALE) / quote_price;
+    let other_confidence_pct = (other.conf * PD_SCALE) / other_price;
 
     // Need to rescale the numbers to prevent the multiplication from overflowing
-    let (rescaled_z, rescaled_z_expo) = PriceConf::rescale_num(base_confidence_pct + quote_confidence_pct, PD_EXPO);
+    let (rescaled_z, rescaled_z_expo) = PriceConf::rescale_num(base_confidence_pct + other_confidence_pct, PD_EXPO);
     println!("rescaled_z {} * 10^{}", rescaled_z, rescaled_z_expo);
     let (rescaled_mid, rescaled_mid_expo) = PriceConf::rescale_num(midprice, midprice_expo);
     println!("rescaled_mean {} * 10^{}", rescaled_mid, rescaled_mid_expo);
@@ -365,8 +366,18 @@ mod test {
     run_test(pc(1, 1, 0), pc(1, 1, 0), 0, (1, 2));
     run_test(pc(10, 1, 0), pc(1, 1, 0), 0, (10, 11));
     run_test(pc(1, 1, 1), pc(1, 1, 0), 0, (10, 20));
+    run_test(pc(1, 1, -8), pc(1, 1, -8), -8, (100000000, 200000000));
     run_test(pc(1, 1, 0), pc(5, 1, 0), 0, (0, 0));
+    run_test(pc(1, 1, 0), pc(5, 1, 0), -1, (2, 2));
     run_test(pc(1, 1, 0), pc(5, 1, 0), -2, (20, 24));
+    run_test(pc(1, 1, 0), pc(5, 1, 0), -9, (200000000, 240000000));
+
+    // More realistic inputs (get BTC price in ETH)
+    let ten_e7: i64 = 10000000;
+    let uten_e7: u64 = 10000000;
+    run_test(pc(520010 * ten_e7, 310 * uten_e7, -8),
+             pc(38591 * ten_e7, 18 * uten_e7, -8),
+             -8, (1347490347, 1431806));
 
     // Test with end range of possible inputs to check for overflow.
     run_test(pc(MAX_PD_V_I64, MAX_PD_V_U64, 0), pc(MAX_PD_V_I64, MAX_PD_V_U64, 0), 0, (1, 2));
@@ -374,6 +385,7 @@ mod test {
     run_test(pc(1, MAX_PD_V_U64, 0), pc(1, MAX_PD_V_U64, 0), 0, (1, 2 * MAX_PD_V_U64));
 
     // TODO: need tests at the edges of the capacity of PD
+
 
     // TODO: Test non-trading cases
 
