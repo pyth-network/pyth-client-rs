@@ -117,9 +117,9 @@ fn main() {
 
           let maybe_price = pa.get_current_price();
           match maybe_price {
-            Some((price, confidence, expo)) => {
-              println!("    price ........ {} x 10^{}", price, expo);
-              println!("    conf ......... {} x 10^{}", confidence, expo);
+            Some(p) => {
+              println!("    price ........ {} x 10^{}", p.price, p.expo);
+              println!("    conf ......... {} x 10^{}", p.conf, p.expo);
             }
             None => {
               println!("    price ........ unavailable");

@@ -186,10 +186,10 @@ impl Price {
       Some(base_price_conf) =>
         match quote.get_current_price() {
           Some(quote_price_conf) =>
-            Some(base_price_conf.div(quote_price_conf, result_expo));
-          None => None
+            Some(base_price_conf.div(quote_price_conf, result_expo)),
+          None => None,
         }
-      None => None
+      None => None,
     }
   }
 
@@ -208,6 +208,8 @@ impl Price {
   }
 }
 
+#[derive(PartialEq)]
+#[derive(Debug)]
 pub struct PriceConf {
   pub price: i64,
   pub conf: u64,
@@ -256,17 +258,17 @@ impl PriceConf {
     let quote_confidence_pct = (quote.conf * PD_SCALE) / quote_price;
 
     // Need to rescale the numbers to prevent the multiplication from overflowing
-    let (rescaled_z, rescaled_z_expo) = rescale_num(base_confidence_pct + quote_confidence_pct, PD_EXPO);
+    let (rescaled_z, rescaled_z_expo) = PriceConf::rescale_num(base_confidence_pct + quote_confidence_pct, PD_EXPO);
     println!("rescaled_z {} * 10^{}", rescaled_z, rescaled_z_expo);
-    let (rescaled_mid, rescaled_mid_expo) = rescale_num(midprice, midprice_expo);
+    let (rescaled_mid, rescaled_mid_expo) = PriceConf::rescale_num(midprice, midprice_expo);
     println!("rescaled_mean {} * 10^{}", rescaled_mid, rescaled_mid_expo);
-    let conf = (rescaled_z * rescaled_mid);
+    let conf = rescaled_z * rescaled_mid;
     let conf_expo = rescaled_z_expo + rescaled_mid_expo;
     println!("conf {} * 10^{}", conf, conf_expo);
 
     // Scale results to the target exponent.
-    let midprice_in_result_expo = scale_to_exponent(midprice, midprice_expo, result_expo);
-    let conf_in_result_expo = scale_to_exponent(conf, conf_expo, result_expo);
+    let midprice_in_result_expo = PriceConf::scale_to_exponent(midprice, midprice_expo, result_expo);
+    let conf_in_result_expo = PriceConf::scale_to_exponent(conf, conf_expo, result_expo);
     let midprice_i64 = midprice_in_result_expo as i64;
     assert!(midprice_i64 >= 0);
 
@@ -338,7 +340,15 @@ impl AccKey
 
 #[cfg(test)]
 mod test {
-  use crate::{AccountType, CorpAction, MAGIC, MAX_PD_V_I64, MAX_PD_V_U64, Price, PriceInfo, PriceStatus, PriceType, rebase_price_info, VERSION, PriceConf};
+  use crate::{MAX_PD_V_I64, MAX_PD_V_U64, PriceConf};
+
+  fn pc(price: i64, conf: u64, expo: i32) -> PriceConf {
+    PriceConf {
+      price: price,
+      conf: conf,
+      expo: expo,
+    }
+  }
 
   #[test]
   fn test_rebase() {
@@ -348,20 +358,20 @@ mod test {
       result_expo: i32,
       expected: (i64, u64),
     ) {
-      let result = pinfo1.div(pinfo2, result_expo);
-      assert_eq!(result, Some((expected.0, expected.1, result_expo)));
+      let result = price1.div(price2, result_expo);
+      assert_eq!(result, pc(expected.0, expected.1, result_expo));
     }
 
-    run_test(PriceConf(1, 1, 0), PriceConf(1, 1, 0), 0, (1, 2));
-    run_test(PriceConf(10, 1, 0), PriceConf(1, 1, 0), 0, (10, 11));
-    run_test(PriceConf(1, 1, 1), PriceConf(1, 1, 0), 0, (10, 20));
-    run_test(PriceConf(1, 1, 0), PriceConf(5, 1, 0), 0, (0, 0));
-    run_test(PriceConf(1, 1, 0), PriceConf(5, 1, 0), -2, (20, 24));
+    run_test(pc(1, 1, 0), pc(1, 1, 0), 0, (1, 2));
+    run_test(pc(10, 1, 0), pc(1, 1, 0), 0, (10, 11));
+    run_test(pc(1, 1, 1), pc(1, 1, 0), 0, (10, 20));
+    run_test(pc(1, 1, 0), pc(5, 1, 0), 0, (0, 0));
+    run_test(pc(1, 1, 0), pc(5, 1, 0), -2, (20, 24));
 
     // Test with end range of possible inputs to check for overflow.
-    run_test(PriceConf(MAX_PD_V_I64, MAX_PD_V_U64, 0), PriceConf(MAX_PD_V_I64, MAX_PD_V_U64, 0), 0, (1, 2));
-    run_test(PriceConf(MAX_PD_V_I64, MAX_PD_V_U64, 0), PriceConf(1, 1, 0), 0, (MAX_PD_V_I64, 2 * MAX_PD_V_U64));
-    run_test(PriceConf(1, MAX_PD_V_U64, 0), PriceConf(1, MAX_PD_V_U64, 0), 0, (1, 2 * MAX_PD_V_U64));
+    run_test(pc(MAX_PD_V_I64, MAX_PD_V_U64, 0), pc(MAX_PD_V_I64, MAX_PD_V_U64, 0), 0, (1, 2));
+    run_test(pc(MAX_PD_V_I64, MAX_PD_V_U64, 0), pc(1, 1, 0), 0, (MAX_PD_V_I64, 2 * MAX_PD_V_U64));
+    run_test(pc(1, MAX_PD_V_U64, 0), pc(1, MAX_PD_V_U64, 0), 0, (1, 2 * MAX_PD_V_U64));
 
     // TODO: need tests at the edges of the capacity of PD
 
