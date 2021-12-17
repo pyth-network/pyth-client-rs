@@ -321,7 +321,7 @@ pub fn scale_to_exponent(
 
 #[cfg(test)]
 mod test {
-  use crate::{Price, PriceStatus, PriceInfo, PriceType, AccountType, MAGIC, VERSION, CorpAction, rebase_price_info, MAX_PD_V_I64, MAX_PD_V_U64};
+  use crate::{AccountType, CorpAction, MAGIC, MAX_PD_V_I64, MAX_PD_V_U64, Price, PriceInfo, PriceStatus, PriceType, rebase_price_info, VERSION};
 
   fn mock_price_info(price: i64, conf: u64, status: PriceStatus) -> PriceInfo {
     return PriceInfo {
@@ -353,23 +353,15 @@ mod test {
     run_test((1, 1, 0), (5, 1, 0), 0, (0, 0));
     run_test((1, 1, 0), (5, 1, 0), -2, (20, 24));
 
-    // The maximum price / confidence value that can appear in on-chain decimals.
+    // Test with end range of possible inputs to check for overflow.
     run_test((MAX_PD_V_I64, MAX_PD_V_U64, 0), (MAX_PD_V_I64, MAX_PD_V_U64, 0), 0, (1, 2));
     run_test((MAX_PD_V_I64, MAX_PD_V_U64, 0), (1, 1, 0), 0, (MAX_PD_V_I64, 2 * MAX_PD_V_U64));
     run_test((1, MAX_PD_V_U64, 0), (1, MAX_PD_V_U64, 0), 0, (1, 2 * MAX_PD_V_U64));
 
-    // Test error cases at
-
     // TODO: need tests at the edges of the capacity of PD
 
+    // TODO: Test non-trading cases
 
-
-    // run_test((100, 1, -2), (1, 1, 0), 1, (2, 1));
-
-
-    // run_test(100, 5, 0, 10, 1, 0, 10, 2, 1);
-
-    // run_test(1000, 1, 0, 100, 1, 0, 10, 1, 0);
-    // run_test(1000, 1, 0, 100, 1, 0, 100, 1, 0);
+    // TODO: test cases where the exponents are dramatically different
   }
 }
