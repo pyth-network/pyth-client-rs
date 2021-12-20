@@ -8,7 +8,7 @@ pub const PROD_ATTR_SIZE : usize = PROD_ACCT_SIZE - PROD_HDR_SIZE;
 
 // Constants for working with pyth's number representation
 const PD_EXPO: i32 = -9;
-const PD_SCALE: u64 = 1000000000;
+const PD_SCALE: u128 = 1000000000;
 const MAX_PD_V_I64: i64 = (1 << 28) - 1;
 const MAX_PD_V_U64: u64 = (1 << 28) - 1;
 
@@ -230,18 +230,20 @@ impl PriceConf {
     // so assuming positive prices throughout seems fine.
     assert!(self.price > 0);
     assert!(other.price > 0);
-    let (base_price, base_expo) = PriceConf::rescale_num(self.price as u64, self.expo);
-    let (other_price, other_expo) = PriceConf::rescale_num(other.price as u64, other.expo);
+    // let (base_price, base_expo) = PriceConf::rescale_num(self.price as u64, self.expo);
+    // let (other_price, other_expo) = PriceConf::rescale_num(other.price as u64, other.expo);
+    let base_price = self.price as u128;
+    let other_price = other.price as u128;
 
-    assert!(self.conf <= MAX_PD_V_U64);
-    assert!(other.conf <= MAX_PD_V_U64);
+    // assert!(self.conf <= MAX_PD_V_U64);
+    // assert!(other.conf <= MAX_PD_V_U64);
 
-    println!("base ({} +- {}) * 10^{}", base_price, self.conf, base_expo);
-    println!("other ({} +- {}) * 10^{}", other_price, other.conf, other_expo);
+    println!("base ({} +- {}) * 10^{}", base_price, self.conf, self.expo);
+    println!("other ({} +- {}) * 10^{}", other_price, other.conf, other.expo);
 
     // Compute the midprice, base in terms of other.
-    let midprice = (base_price * PD_SCALE) / other_price;
-    let midprice_expo = PD_EXPO + base_expo - other_expo;
+    let midprice = base_price * PD_SCALE / other_price;
+    let midprice_expo = PD_EXPO + self.expo - other.expo;
     println!("mean {} * 10^{}", midprice, midprice_expo);
     assert!(result_expo >= midprice_expo);
 
@@ -254,9 +256,11 @@ impl PriceConf {
     // This quantity is at most a factor of sqrt(2) greater than the correct result, which
     // shouldn't matter considering that confidence intervals are typically ~0.1% of the price.
 
+    // (p/q) * (c_1/p + c_2/q) = (c_1 / q) + c_2 p / q^2
+
     // The exponent is PD_EXPO for both of these.
-    let base_confidence_pct = (self.conf * PD_SCALE) / base_price;
-    let other_confidence_pct = (other.conf * PD_SCALE) / other_price;
+    let base_confidence_pct: u128 = ((self.conf as u128) * PD_SCALE) / base_price;
+    let other_confidence_pct: u128 = ((other.conf as u128) * PD_SCALE) / other_price;
 
     // Need to rescale the numbers to prevent the multiplication from overflowing
     let (rescaled_z, rescaled_z_expo) = PriceConf::rescale_num(base_confidence_pct + other_confidence_pct, PD_EXPO);
@@ -269,7 +273,7 @@ impl PriceConf {
 
     // Scale results to the target exponent.
     let midprice_in_result_expo = PriceConf::scale_to_exponent(midprice, midprice_expo, result_expo);
-    let conf_in_result_expo = PriceConf::scale_to_exponent(conf, conf_expo, result_expo);
+    let conf_in_result_expo = PriceConf::scale_to_exponent(conf as u128, conf_expo, result_expo);
     let midprice_i64 = midprice_in_result_expo as i64;
     assert!(midprice_i64 >= 0);
 
@@ -284,27 +288,25 @@ impl PriceConf {
    * (which guarantees that multiplication doesn't overflow).
    */
   fn rescale_num(
-    num: u64,
+    num: u128,
     expo: i32,
   ) -> (u64, i32) {
-    let mut p: u64 = num;
+    let mut p: u128 = num;
     let mut c: i32 = 0;
 
-    while p > MAX_PD_V_U64 {
+    while p > (MAX_PD_V_U64 as u128) {
       p = p / 10;
       c += 1;
     }
 
-    println!("c: {}", c);
-
-    return (p, expo + c);
+    return (p as u64, expo + c);
   }
 
   /** Scale num so that its exponent is target_expo.
    * This method can only reduce precision, i.e., target_expo must be > current_expo.
    */
   fn scale_to_exponent(
-    num: u64,
+    num: u128,
     current_expo: i32,
     target_expo: i32,
   ) -> u64 {
@@ -317,7 +319,8 @@ impl PriceConf {
       delta -= 1;
     }
 
-    return res;
+    // FIXME: check that this cast panics if res > max_u64
+    return res as u64;
   }
 }
 
@@ -377,7 +380,7 @@ mod test {
     let uten_e7: u64 = 10000000;
     run_test(pc(520010 * ten_e7, 310 * uten_e7, -8),
              pc(38591 * ten_e7, 18 * uten_e7, -8),
-             -8, (1347490347, 1431806));
+             -8, (1347490347, 1431804));
 
     // Test with end range of possible inputs to check for overflow.
     run_test(pc(MAX_PD_V_I64, MAX_PD_V_U64, 0), pc(MAX_PD_V_I64, MAX_PD_V_U64, 0), 0, (1, 2));
