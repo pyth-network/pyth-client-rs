@@ -218,6 +218,7 @@ impl PriceConf {
    * `result_expo` determines the exponent of the result. The minimum possible exponent is
    * `-9 + self.exponent - other.exponent`. (This minimum exponent reflects the maximum possible
    * precision for the result given the precision of the two inputs and the numeric representation.)
+   * TODO: possibly allow smaller exponents
    *
    * This function will return `None` unless all of the following conditions are satisfied:
    * 1. The prices of self and other are > 0.
@@ -278,6 +279,7 @@ impl PriceConf {
         match (midprice_in_result_expo, conf_in_result_expo) {
           (Some(m), Some(c)) => {
             let m_i64 = m as i64;
+            // This should be guaranteed to succeed because midprice uses <= 57 bits
             assert!(m_i64 >= 0);
 
             Some(PriceConf {
@@ -293,8 +295,14 @@ impl PriceConf {
     }
   }
 
+  /**
+   * Get a copy of this struct where the price and confidence
+   * have been normalized to be less than `MAX_PD_V_U64`.
+   * Returns `None` if `price == 0` before or after normalization.
+   */
   pub fn normalized(&self) -> Option<PriceConf> {
     if self.price > 0 {
+      // BPF only supports unsigned division
       let mut p: u64 = self.price as u64;
       let mut c: u64 = self.conf;
       let mut e: i32 = self.expo;
@@ -320,25 +328,8 @@ impl PriceConf {
     }
   }
 
-  /** Scale num and its exponent such that it is < MAX_PD_V_U64
-   * (which guarantees that multiplication doesn't overflow).
-   */
-  fn rescale_num(
-    num: u128,
-    expo: i32,
-  ) -> (u64, i32) {
-    let mut p: u128 = num;
-    let mut c: i32 = 0;
-
-    while p > (MAX_PD_V_U64 as u128) {
-      p = p / 10;
-      c += 1;
-    }
-
-    return (p as u64, expo + c);
-  }
-
-  /** Scale num so that its exponent is target_expo.
+  /**
+   * Scale num so that its exponent is target_expo.
    * This method can only reduce precision, i.e., target_expo must be > current_expo.
    */
   fn scale_to_exponent(
@@ -354,8 +345,11 @@ impl PriceConf {
         delta -= 1;
       }
 
-      // FIXME: check that this cast panics if res > max_u64
-      return Some(res as u64);
+      if res <= (u64::MAX_VALUE as u128) {
+        Some(res as u64)
+      } else {
+        None
+      }
     } else {
       None
     }
