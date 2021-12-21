@@ -8,7 +8,7 @@ pub const PROD_ATTR_SIZE : usize = PROD_ACCT_SIZE - PROD_HDR_SIZE;
 
 // Constants for working with pyth's number representation
 const PD_EXPO: i32 = -9;
-const PD_SCALE: u128 = 1000000000;
+const PD_SCALE: u64 = 1_000_000_000;
 const MAX_PD_V_I64: i64 = (1 << 28) - 1;
 const MAX_PD_V_U64: u64 = (1 << 28) - 1;
 
@@ -216,12 +216,18 @@ pub struct PriceConf {
 impl PriceConf {
   /**
    * Divide this price by `other` while propagating the uncertainty in both prices into the result.
-   * The uncertainty propagation algorithm is an approximation (due to computational limitations)
-   * and may slightly overestimate the resulting uncertainty (by at most a factor of sqrt(2)).
+   * The uncertainty propagation algorithm is an approximation due to computational limitations
+   * that may slightly overestimate the resulting uncertainty (by at most a factor of sqrt(2)).
    *
    * `result_expo` determines the exponent of the result. The minimum possible exponent is
    * `-9 + self.exponent - other.exponent`. (This minimum exponent reflects the maximum possible
    * precision for the result given the precision of the two inputs and the numeric representation.)
+   *
+   * This function may panic unless the following conditions are satisfied:
+   * 1. The prices of self and other are > 0.
+   * 2. The result price can be represented using a 64-bit number with exponent `result_expo`.
+   *    (To satisfy this condition, simply don't choose a very negative `result_expo`)
+   * 3. The confidence interval is
    */
   pub fn div(&self, other: PriceConf, result_expo: i32) -> PriceConf {
     // Note that this assertion implies that the prices can be cast to u64.
@@ -230,22 +236,26 @@ impl PriceConf {
     // so assuming positive prices throughout seems fine.
     assert!(self.price > 0);
     assert!(other.price > 0);
-    // let (base_price, base_expo) = PriceConf::rescale_num(self.price as u64, self.expo);
-    // let (other_price, other_expo) = PriceConf::rescale_num(other.price as u64, other.expo);
-    let base_price = self.price as u128;
-    let other_price = other.price as u128;
 
-    // assert!(self.conf <= MAX_PD_V_U64);
-    // assert!(other.conf <= MAX_PD_V_U64);
+    // PriceConf is not guaranteed to store its price/confidence in normalized form.
+    // Normalize them here to bound the range of price/conf, which is required to perform
+    // arithmetic operations.
+    let base = self.normalized();
+    let other = other.normalized();
 
-    println!("base ({} +- {}) * 10^{}", base_price, self.conf, self.expo);
+    // These use at most 27 bits each
+    let base_price = base.price as u64;
+    let other_price = other.price as u64;
+
+    println!("----");
+    println!("base ({} +- {}) * 10^{}", base_price, base.conf, base.expo);
     println!("other ({} +- {}) * 10^{}", other_price, other.conf, other.expo);
 
     // Compute the midprice, base in terms of other.
+    // Uses at most 57 bits
     let midprice = base_price * PD_SCALE / other_price;
-    let midprice_expo = PD_EXPO + self.expo - other.expo;
+    let midprice_expo = PD_EXPO + base.expo - other.expo;
     println!("mean {} * 10^{}", midprice, midprice_expo);
-    assert!(result_expo >= midprice_expo);
 
     // Compute the confidence interval.
     // This code uses the 1-norm instead of the 2-norm for computational reasons.
@@ -256,24 +266,21 @@ impl PriceConf {
     // This quantity is at most a factor of sqrt(2) greater than the correct result, which
     // shouldn't matter considering that confidence intervals are typically ~0.1% of the price.
 
-    // (p/q) * (c_1/p + c_2/q) = (c_1 / q) + c_2 p / q^2
+    // The exponent is PD_EXPO for both of these. Each of these uses 57 bits.
+    let base_confidence_pct: u64 = (base.conf * PD_SCALE) / base_price;
+    let other_confidence_pct: u64 = (other.conf * PD_SCALE) / other_price;
 
-    // The exponent is PD_EXPO for both of these.
-    let base_confidence_pct: u128 = ((self.conf as u128) * PD_SCALE) / base_price;
-    let other_confidence_pct: u128 = ((other.conf as u128) * PD_SCALE) / other_price;
-
-    // Need to rescale the numbers to prevent the multiplication from overflowing
-    let (rescaled_z, rescaled_z_expo) = PriceConf::rescale_num(base_confidence_pct + other_confidence_pct, PD_EXPO);
-    println!("rescaled_z {} * 10^{}", rescaled_z, rescaled_z_expo);
-    let (rescaled_mid, rescaled_mid_expo) = PriceConf::rescale_num(midprice, midprice_expo);
-    println!("rescaled_mean {} * 10^{}", rescaled_mid, rescaled_mid_expo);
-    let conf = rescaled_z * rescaled_mid;
-    let conf_expo = rescaled_z_expo + rescaled_mid_expo;
+    // at most 58 bits
+    let confidence_pct = base_confidence_pct + other_confidence_pct;
+    println!("rescaled_z {} * 10^{}", confidence_pct, PD_EXPO);
+    // at most 115 bits
+    let conf = (confidence_pct as u128) * (midprice as u128);
+    let conf_expo = PD_EXPO + midprice_expo;
     println!("conf {} * 10^{}", conf, conf_expo);
 
     // Scale results to the target exponent.
-    let midprice_in_result_expo = PriceConf::scale_to_exponent(midprice, midprice_expo, result_expo);
-    let conf_in_result_expo = PriceConf::scale_to_exponent(conf as u128, conf_expo, result_expo);
+    let midprice_in_result_expo = PriceConf::scale_to_exponent(midprice as u128, midprice_expo, result_expo);
+    let conf_in_result_expo = PriceConf::scale_to_exponent(conf, conf_expo, result_expo);
     let midprice_i64 = midprice_in_result_expo as i64;
     assert!(midprice_i64 >= 0);
 
@@ -281,6 +288,28 @@ impl PriceConf {
       price: midprice_i64,
       conf: conf_in_result_expo,
       expo: result_expo
+    }
+  }
+
+  pub fn normalized(&self) -> PriceConf {
+    assert!(self.price > 0);
+    let mut p: u64 = self.price as u64;
+    let mut c: u64 = self.conf;
+    let mut e: i32 = self.expo;
+
+    while p > MAX_PD_V_U64 || c > MAX_PD_V_U64 {
+      p = p / 10;
+      c = c / 10;
+      e += 1;
+    }
+
+    // Can get p == 0 if confidence is >> price.
+    assert!(p > 0);
+
+    PriceConf {
+      price: p as i64,
+      conf: c,
+      expo: e,
     }
   }
 
@@ -344,7 +373,7 @@ impl AccKey
 
 #[cfg(test)]
 mod test {
-  use crate::{MAX_PD_V_I64, MAX_PD_V_U64, PriceConf};
+  use crate::{MAX_PD_V_I64, MAX_PD_V_U64, PriceConf, PD_SCALE};
 
   fn pc(price: i64, conf: u64, expo: i32) -> PriceConf {
     PriceConf {
@@ -369,29 +398,49 @@ mod test {
     run_test(pc(1, 1, 0), pc(1, 1, 0), 0, (1, 2));
     run_test(pc(10, 1, 0), pc(1, 1, 0), 0, (10, 11));
     run_test(pc(1, 1, 1), pc(1, 1, 0), 0, (10, 20));
-    run_test(pc(1, 1, -8), pc(1, 1, -8), -8, (100000000, 200000000));
+    run_test(pc(1, 1, -8), pc(1, 1, -8), -8, (100_000_000, 200_000_000));
     run_test(pc(1, 1, 0), pc(5, 1, 0), 0, (0, 0));
     run_test(pc(1, 1, 0), pc(5, 1, 0), -1, (2, 2));
     run_test(pc(1, 1, 0), pc(5, 1, 0), -2, (20, 24));
-    run_test(pc(1, 1, 0), pc(5, 1, 0), -9, (200000000, 240000000));
+    run_test(pc(1, 1, 0), pc(5, 1, 0), -9, (200_000_000, 240_000_000));
+
+    // Different exponents in the two inputs
+    run_test(pc(100, 10, -8), pc(2, 1, -7), -8, (500_000_000, 300_000_000));
+    run_test(pc(100, 10, -4), pc(2, 1, 0), -8, (500_000, 300_000));
+    run_test(pc(100, 10, -4), pc(2, 1, 0), -4, (50, 30));
+
+    // Test with end range of possible inputs where the output should not lose precision.
+    run_test(pc(MAX_PD_V_I64, MAX_PD_V_U64, 0), pc(MAX_PD_V_I64, MAX_PD_V_U64, 0), 0, (1, 2));
+    run_test(pc(MAX_PD_V_I64, MAX_PD_V_U64, 0), pc(1, 1, 0), 0, (MAX_PD_V_I64, 2 * MAX_PD_V_U64));
+    run_test(pc(1, MAX_PD_V_U64, 0), pc(1, MAX_PD_V_U64, 0), 0, (1, 2 * MAX_PD_V_U64));
+    run_test(pc(MAX_PD_V_I64, MAX_PD_V_U64, 0), pc(1, MAX_PD_V_U64, 0), 0, (MAX_PD_V_I64, MAX_PD_V_U64 * MAX_PD_V_U64 + (MAX_PD_V_I64 as u64)));
 
     // More realistic inputs (get BTC price in ETH)
+    // Note these inputs are not normalized
     let ten_e7: i64 = 10000000;
     let uten_e7: u64 = 10000000;
     run_test(pc(520010 * ten_e7, 310 * uten_e7, -8),
              pc(38591 * ten_e7, 18 * uten_e7, -8),
              -8, (1347490347, 1431804));
 
-    // Test with end range of possible inputs to check for overflow.
-    run_test(pc(MAX_PD_V_I64, MAX_PD_V_U64, 0), pc(MAX_PD_V_I64, MAX_PD_V_U64, 0), 0, (1, 2));
-    run_test(pc(MAX_PD_V_I64, MAX_PD_V_U64, 0), pc(1, 1, 0), 0, (MAX_PD_V_I64, 2 * MAX_PD_V_U64));
-    run_test(pc(1, MAX_PD_V_U64, 0), pc(1, MAX_PD_V_U64, 0), 0, (1, 2 * MAX_PD_V_U64));
+    // Test with end range of possible inputs to identify overflow
+    // These inputs will lose precision due to the initial normalization.
+    // Get the rounded versions of these inputs in order to compute the expected results.
+    let normed = pc(i64::MAX, u64::MAX, 0).normalized();
+    let max_i64 = normed.price * (10_i64.pow(normed.expo as u32));
+    let max_u64 = normed.conf * (10_u64.pow(normed.expo as u32));
 
-    // TODO: need tests at the edges of the capacity of PD
+    let mi = normed.price;
+    let mu = normed.conf;
 
-
-    // TODO: Test non-trading cases
-
-    // TODO: test cases where the exponents are dramatically different
+    run_test(pc(i64::MAX, u64::MAX, 0), pc(i64::MAX, u64::MAX, 0), 0, (1, 4));
+    run_test(pc(i64::MAX, u64::MAX, 0), pc(1, 1, 0), 7, (max_i64 / ten_e7, 3 * ((max_i64 as u64) / uten_e7)));
+    // FIXME: the price being 0 here is not good
+    // Could make a precondition that conf < price * something
+    /*
+    run_test(pc(1, u64::MAX, 0), pc(1, u64::MAX, 0), 7, (0, 2 * (max_u64 / uten_e7)));
+    run_test(pc(i64::MAX, u64::MAX, 0), pc(1, u64::MAX, 0), normed.expo,
+             (mi, mu * mu + (mi as u64)));
+     */
   }
 }
