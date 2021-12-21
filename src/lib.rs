@@ -339,13 +339,13 @@ impl PriceConf {
   ) -> Option<u64> {
     let mut delta = target_expo - current_expo;
     let mut res = num;
-    if (delta >= 0) {
+    if delta >= 0 {
       while delta > 0 {
         res /= 10;
         delta -= 1;
       }
 
-      if res <= (u64::MAX_VALUE as u128) {
+      if res <= (u64::MAX as u128) {
         Some(res as u64)
       } else {
         None
@@ -376,7 +376,7 @@ impl AccKey
 
 #[cfg(test)]
 mod test {
-  use crate::{MAX_PD_V_I64, MAX_PD_V_U64, PriceConf, PD_SCALE};
+  use crate::{MAX_PD_V_I64, MAX_PD_V_U64, PriceConf, PD_SCALE, PD_EXPO};
 
   fn pc(price: i64, conf: u64, expo: i32) -> PriceConf {
     PriceConf {
@@ -442,13 +442,22 @@ mod test {
     let max_i64 = normed.price * (10_i64.pow(normed.expo as u32));
     let max_u64 = normed.conf * (10_u64.pow(normed.expo as u32));
 
-    let mi = normed.price;
-    let mu = normed.conf;
-
     test_succeeds(pc(i64::MAX, u64::MAX, 0), pc(i64::MAX, u64::MAX, 0), 0, (1, 4));
     test_succeeds(pc(i64::MAX, u64::MAX, 0), pc(1, 1, 0), 7, (max_i64 / ten_e7, 3 * ((max_i64 as u64) / uten_e7)));
 
+    // Price is zero pre-normalization
+    test_fails(pc(0, 1, 0), pc(1, 1, 0), PD_EXPO - 1);
+    test_fails(pc(1, 1, 0), pc(0, 1, 0), PD_EXPO - 1);
+
     // Can't normalize the input when the confidence is >> price.
-    test_fails(pc(1, u64::MAX, 0), pc(1, u64::MAX, 0), 7);
+    test_fails(pc(1, 1, 0), pc(1, u64::MAX, 0), 7);
+    test_fails(pc(1, u64::MAX, 0), pc(1, 1, 0), 7);
+
+    // Result exponent too small
+    test_succeeds(pc(1, 1, 0), pc(1, 1, 0), PD_EXPO, (1 * (PD_SCALE as i64), 2 * PD_SCALE));
+    test_fails(pc(1, 1, 0), pc(1, 1, 0), PD_EXPO - 1);
+
+    // TODO: handle the case where the result exponent is too large more gracefully.
+    test_succeeds(pc(1, 1, 0), pc(1, 1, 0), 1, (0, 0));
   }
 }
