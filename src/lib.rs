@@ -167,14 +167,10 @@ impl Price {
    * precision for the result given the precision of the two inputs and the numeric representation.)
    */
   pub fn get_price_in_quote(&self, quote: Price, result_expo: i32) -> Option<PriceConf> {
-    return match self.get_current_price() {
-      Some(base_price_conf) =>
-        match quote.get_current_price() {
-          Some(quote_price_conf) =>
-            Some(base_price_conf.div(quote_price_conf, result_expo)),
-          None => None,
-        }
-      None => None,
+    return match (self.get_current_price(), quote.get_current_price()) {
+      (Some(base_price_conf), Some(quote_price_conf)) =>
+        base_price_conf.div(quote_price_conf, result_expo),
+      (_, _) => None,
     }
   }
 
@@ -223,93 +219,104 @@ impl PriceConf {
    * `-9 + self.exponent - other.exponent`. (This minimum exponent reflects the maximum possible
    * precision for the result given the precision of the two inputs and the numeric representation.)
    *
-   * This function may panic unless the following conditions are satisfied:
+   * This function will return `None` unless all of the following conditions are satisfied:
    * 1. The prices of self and other are > 0.
-   * 2. The result price can be represented using a 64-bit number with exponent `result_expo`.
-   *    (To satisfy this condition, simply don't choose a very negative `result_expo`)
-   * 3. The confidence interval is
+   * 2. The resulting price and confidence can be represented using a 64-bit number with
+   *    exponent `result_expo`.
+   * 3. The confidence interval of self / other are << MAX_PD_V_U64 times their the respective price.
+   *    (This condition should essentially always be satisfied in the real world.)
    */
-  pub fn div(&self, other: PriceConf, result_expo: i32) -> PriceConf {
-    // Note that this assertion implies that the prices can be cast to u64.
-    // We need prices as u64 in order to divide, as solana doesn't implement signed division.
-    // It's also extremely unclear what this method should do if one of the prices is negative,
-    // so assuming positive prices throughout seems fine.
-    assert!(self.price > 0);
-    assert!(other.price > 0);
-
+  pub fn div(&self, other: PriceConf, result_expo: i32) -> Option<PriceConf> {
     // PriceConf is not guaranteed to store its price/confidence in normalized form.
     // Normalize them here to bound the range of price/conf, which is required to perform
     // arithmetic operations.
-    let base = self.normalized();
-    let other = other.normalized();
+    match (self.normalized(), other.normalized()) {
+      (Some(base), Some(other)) => {
+        // Note that normalization implies that the prices can be cast to u64.
+        // We need prices as u64 in order to divide, as solana doesn't implement signed division.
+        // It's also extremely unclear what this method should do if one of the prices is negative,
+        // so assuming positive prices throughout seems fine.
 
-    // These use at most 27 bits each
-    let base_price = base.price as u64;
-    let other_price = other.price as u64;
+        // These use at most 27 bits each
+        let base_price = base.price as u64;
+        let other_price = other.price as u64;
 
-    println!("----");
-    println!("base ({} +- {}) * 10^{}", base_price, base.conf, base.expo);
-    println!("other ({} +- {}) * 10^{}", other_price, other.conf, other.expo);
+        println!("----");
+        println!("base ({} +- {}) * 10^{}", base_price, base.conf, base.expo);
+        println!("other ({} +- {}) * 10^{}", other_price, other.conf, other.expo);
 
-    // Compute the midprice, base in terms of other.
-    // Uses at most 57 bits
-    let midprice = base_price * PD_SCALE / other_price;
-    let midprice_expo = PD_EXPO + base.expo - other.expo;
-    println!("mean {} * 10^{}", midprice, midprice_expo);
+        // Compute the midprice, base in terms of other.
+        // Uses at most 57 bits
+        let midprice = base_price * PD_SCALE / other_price;
+        let midprice_expo = PD_EXPO + base.expo - other.expo;
+        println!("mean {} * 10^{}", midprice, midprice_expo);
 
-    // Compute the confidence interval.
-    // This code uses the 1-norm instead of the 2-norm for computational reasons.
-    // The correct formula is midprice * sqrt(c_1^2 + c_2^2), where c_1 and c_2 are the
-    // confidence intervals in price-percentage terms of the base and other. This quantity
-    // is difficult to compute due to the sqrt, and overflow/underflow considerations.
-    // Instead, this code uses midprice * (c_1 + c_2).
-    // This quantity is at most a factor of sqrt(2) greater than the correct result, which
-    // shouldn't matter considering that confidence intervals are typically ~0.1% of the price.
+        // Compute the confidence interval.
+        // This code uses the 1-norm instead of the 2-norm for computational reasons.
+        // The correct formula is midprice * sqrt(c_1^2 + c_2^2), where c_1 and c_2 are the
+        // confidence intervals in price-percentage terms of the base and other. This quantity
+        // is difficult to compute due to the sqrt, and overflow/underflow considerations.
+        // Instead, this code uses midprice * (c_1 + c_2).
+        // This quantity is at most a factor of sqrt(2) greater than the correct result, which
+        // shouldn't matter considering that confidence intervals are typically ~0.1% of the price.
 
-    // The exponent is PD_EXPO for both of these. Each of these uses 57 bits.
-    let base_confidence_pct: u64 = (base.conf * PD_SCALE) / base_price;
-    let other_confidence_pct: u64 = (other.conf * PD_SCALE) / other_price;
+        // The exponent is PD_EXPO for both of these. Each of these uses 57 bits.
+        let base_confidence_pct: u64 = (base.conf * PD_SCALE) / base_price;
+        let other_confidence_pct: u64 = (other.conf * PD_SCALE) / other_price;
 
-    // at most 58 bits
-    let confidence_pct = base_confidence_pct + other_confidence_pct;
-    println!("rescaled_z {} * 10^{}", confidence_pct, PD_EXPO);
-    // at most 115 bits
-    let conf = (confidence_pct as u128) * (midprice as u128);
-    let conf_expo = PD_EXPO + midprice_expo;
-    println!("conf {} * 10^{}", conf, conf_expo);
+        // at most 58 bits
+        let confidence_pct = base_confidence_pct + other_confidence_pct;
+        println!("rescaled_z {} * 10^{}", confidence_pct, PD_EXPO);
+        // at most 115 bits
+        let conf = (confidence_pct as u128) * (midprice as u128);
+        let conf_expo = PD_EXPO + midprice_expo;
+        println!("conf {} * 10^{}", conf, conf_expo);
 
-    // Scale results to the target exponent.
-    let midprice_in_result_expo = PriceConf::scale_to_exponent(midprice as u128, midprice_expo, result_expo);
-    let conf_in_result_expo = PriceConf::scale_to_exponent(conf, conf_expo, result_expo);
-    let midprice_i64 = midprice_in_result_expo as i64;
-    assert!(midprice_i64 >= 0);
+        // Scale results to the target exponent.
+        let midprice_in_result_expo = PriceConf::scale_to_exponent(midprice as u128, midprice_expo, result_expo);
+        let conf_in_result_expo = PriceConf::scale_to_exponent(conf, conf_expo, result_expo);
+        match (midprice_in_result_expo, conf_in_result_expo) {
+          (Some(m), Some(c)) => {
+            let m_i64 = m as i64;
+            assert!(m_i64 >= 0);
 
-    PriceConf {
-      price: midprice_i64,
-      conf: conf_in_result_expo,
-      expo: result_expo
+            Some(PriceConf {
+              price: m_i64,
+              conf: c,
+              expo: result_expo
+            })
+          }
+          (_, _) => None
+        }
+      }
+      (_, _) => None
     }
   }
 
-  pub fn normalized(&self) -> PriceConf {
-    assert!(self.price > 0);
-    let mut p: u64 = self.price as u64;
-    let mut c: u64 = self.conf;
-    let mut e: i32 = self.expo;
+  pub fn normalized(&self) -> Option<PriceConf> {
+    if self.price > 0 {
+      let mut p: u64 = self.price as u64;
+      let mut c: u64 = self.conf;
+      let mut e: i32 = self.expo;
 
-    while p > MAX_PD_V_U64 || c > MAX_PD_V_U64 {
-      p = p / 10;
-      c = c / 10;
-      e += 1;
-    }
+      while p > MAX_PD_V_U64 || c > MAX_PD_V_U64 {
+        p = p / 10;
+        c = c / 10;
+        e += 1;
+      }
 
-    // Can get p == 0 if confidence is >> price.
-    assert!(p > 0);
-
-    PriceConf {
-      price: p as i64,
-      conf: c,
-      expo: e,
+      // Can get p == 0 if confidence is >> price.
+      if p > 0 {
+        Some(PriceConf {
+          price: p as i64,
+          conf: c,
+          expo: e,
+        })
+      } else {
+        None
+      }
+    } else {
+      None
     }
   }
 
@@ -338,18 +345,20 @@ impl PriceConf {
     num: u128,
     current_expo: i32,
     target_expo: i32,
-  ) -> u64 {
+  ) -> Option<u64> {
     let mut delta = target_expo - current_expo;
     let mut res = num;
-    assert!(delta >= 0);
+    if (delta >= 0) {
+      while delta > 0 {
+        res /= 10;
+        delta -= 1;
+      }
 
-    while delta > 0 {
-      res /= 10;
-      delta -= 1;
+      // FIXME: check that this cast panics if res > max_u64
+      return Some(res as u64);
+    } else {
+      None
     }
-
-    // FIXME: check that this cast panics if res > max_u64
-    return res as u64;
   }
 }
 
@@ -385,62 +394,67 @@ mod test {
 
   #[test]
   fn test_rebase() {
-    fn run_test(
+    fn test_succeeds(
       price1: PriceConf,
       price2: PriceConf,
       result_expo: i32,
       expected: (i64, u64),
     ) {
       let result = price1.div(price2, result_expo);
-      assert_eq!(result, pc(expected.0, expected.1, result_expo));
+      assert_eq!(result, Some(pc(expected.0, expected.1, result_expo)));
     }
 
-    run_test(pc(1, 1, 0), pc(1, 1, 0), 0, (1, 2));
-    run_test(pc(10, 1, 0), pc(1, 1, 0), 0, (10, 11));
-    run_test(pc(1, 1, 1), pc(1, 1, 0), 0, (10, 20));
-    run_test(pc(1, 1, -8), pc(1, 1, -8), -8, (100_000_000, 200_000_000));
-    run_test(pc(1, 1, 0), pc(5, 1, 0), 0, (0, 0));
-    run_test(pc(1, 1, 0), pc(5, 1, 0), -1, (2, 2));
-    run_test(pc(1, 1, 0), pc(5, 1, 0), -2, (20, 24));
-    run_test(pc(1, 1, 0), pc(5, 1, 0), -9, (200_000_000, 240_000_000));
+    fn test_fails(
+      price1: PriceConf,
+      price2: PriceConf,
+      result_expo: i32,
+    ) {
+      let result = price1.div(price2, result_expo);
+      assert_eq!(result, None);
+    }
+
+    test_succeeds(pc(1, 1, 0), pc(1, 1, 0), 0, (1, 2));
+    test_succeeds(pc(10, 1, 0), pc(1, 1, 0), 0, (10, 11));
+    test_succeeds(pc(1, 1, 1), pc(1, 1, 0), 0, (10, 20));
+    test_succeeds(pc(1, 1, -8), pc(1, 1, -8), -8, (100_000_000, 200_000_000));
+    test_succeeds(pc(1, 1, 0), pc(5, 1, 0), 0, (0, 0));
+    test_succeeds(pc(1, 1, 0), pc(5, 1, 0), -1, (2, 2));
+    test_succeeds(pc(1, 1, 0), pc(5, 1, 0), -2, (20, 24));
+    test_succeeds(pc(1, 1, 0), pc(5, 1, 0), -9, (200_000_000, 240_000_000));
 
     // Different exponents in the two inputs
-    run_test(pc(100, 10, -8), pc(2, 1, -7), -8, (500_000_000, 300_000_000));
-    run_test(pc(100, 10, -4), pc(2, 1, 0), -8, (500_000, 300_000));
-    run_test(pc(100, 10, -4), pc(2, 1, 0), -4, (50, 30));
+    test_succeeds(pc(100, 10, -8), pc(2, 1, -7), -8, (500_000_000, 300_000_000));
+    test_succeeds(pc(100, 10, -4), pc(2, 1, 0), -8, (500_000, 300_000));
+    test_succeeds(pc(100, 10, -4), pc(2, 1, 0), -4, (50, 30));
 
     // Test with end range of possible inputs where the output should not lose precision.
-    run_test(pc(MAX_PD_V_I64, MAX_PD_V_U64, 0), pc(MAX_PD_V_I64, MAX_PD_V_U64, 0), 0, (1, 2));
-    run_test(pc(MAX_PD_V_I64, MAX_PD_V_U64, 0), pc(1, 1, 0), 0, (MAX_PD_V_I64, 2 * MAX_PD_V_U64));
-    run_test(pc(1, MAX_PD_V_U64, 0), pc(1, MAX_PD_V_U64, 0), 0, (1, 2 * MAX_PD_V_U64));
-    run_test(pc(MAX_PD_V_I64, MAX_PD_V_U64, 0), pc(1, MAX_PD_V_U64, 0), 0, (MAX_PD_V_I64, MAX_PD_V_U64 * MAX_PD_V_U64 + (MAX_PD_V_I64 as u64)));
+    test_succeeds(pc(MAX_PD_V_I64, MAX_PD_V_U64, 0), pc(MAX_PD_V_I64, MAX_PD_V_U64, 0), 0, (1, 2));
+    test_succeeds(pc(MAX_PD_V_I64, MAX_PD_V_U64, 0), pc(1, 1, 0), 0, (MAX_PD_V_I64, 2 * MAX_PD_V_U64));
+    test_succeeds(pc(1, MAX_PD_V_U64, 0), pc(1, MAX_PD_V_U64, 0), 0, (1, 2 * MAX_PD_V_U64));
+    test_succeeds(pc(MAX_PD_V_I64, MAX_PD_V_U64, 0), pc(1, MAX_PD_V_U64, 0), 0, (MAX_PD_V_I64, MAX_PD_V_U64 * MAX_PD_V_U64 + (MAX_PD_V_I64 as u64)));
 
     // More realistic inputs (get BTC price in ETH)
     // Note these inputs are not normalized
     let ten_e7: i64 = 10000000;
     let uten_e7: u64 = 10000000;
-    run_test(pc(520010 * ten_e7, 310 * uten_e7, -8),
-             pc(38591 * ten_e7, 18 * uten_e7, -8),
-             -8, (1347490347, 1431804));
+    test_succeeds(pc(520010 * ten_e7, 310 * uten_e7, -8),
+                  pc(38591 * ten_e7, 18 * uten_e7, -8),
+                  -8, (1347490347, 1431804));
 
     // Test with end range of possible inputs to identify overflow
     // These inputs will lose precision due to the initial normalization.
     // Get the rounded versions of these inputs in order to compute the expected results.
-    let normed = pc(i64::MAX, u64::MAX, 0).normalized();
+    let normed = pc(i64::MAX, u64::MAX, 0).normalized().unwrap();
     let max_i64 = normed.price * (10_i64.pow(normed.expo as u32));
     let max_u64 = normed.conf * (10_u64.pow(normed.expo as u32));
 
     let mi = normed.price;
     let mu = normed.conf;
 
-    run_test(pc(i64::MAX, u64::MAX, 0), pc(i64::MAX, u64::MAX, 0), 0, (1, 4));
-    run_test(pc(i64::MAX, u64::MAX, 0), pc(1, 1, 0), 7, (max_i64 / ten_e7, 3 * ((max_i64 as u64) / uten_e7)));
-    // FIXME: the price being 0 here is not good
-    // Could make a precondition that conf < price * something
-    /*
-    run_test(pc(1, u64::MAX, 0), pc(1, u64::MAX, 0), 7, (0, 2 * (max_u64 / uten_e7)));
-    run_test(pc(i64::MAX, u64::MAX, 0), pc(1, u64::MAX, 0), normed.expo,
-             (mi, mu * mu + (mi as u64)));
-     */
+    test_succeeds(pc(i64::MAX, u64::MAX, 0), pc(i64::MAX, u64::MAX, 0), 0, (1, 4));
+    test_succeeds(pc(i64::MAX, u64::MAX, 0), pc(1, 1, 0), 7, (max_i64 / ten_e7, 3 * ((max_i64 as u64) / uten_e7)));
+
+    // Can't normalize the input when the confidence is >> price.
+    test_fails(pc(1, u64::MAX, 0), pc(1, u64::MAX, 0), 7);
   }
 }
