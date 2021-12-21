@@ -353,20 +353,6 @@ impl PriceConf {
       None
     }
   }
-
-  /**
-   * Get the time-weighted average price (TWAP) as a fixed point number of the form a * 10^e.
-   * Returns a tuple of the current twap and its exponent. For example:
-   *
-   * get_twap() -> Some((123, -2)) // represents 1.23
-   * get_twap() -> Some((45, 3)) // represents 45000
-   *
-   * Returns None if the twap is currently unavailable.
-   */
-  pub fn get_twap(&self) -> Option<(i64, i32)> {
-    // This method currently cannot return None, but may do so in the future.
-    Some((self.twap.val, self.expo))
-  }
 }
 
 struct AccKeyU64
