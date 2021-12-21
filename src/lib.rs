@@ -1,3 +1,6 @@
+mod entrypoint;
+pub mod processor;
+
 pub const MAGIC          : u32   = 0xa1b2c3d4;
 pub const VERSION_2      : u32   = 2;
 pub const VERSION        : u32   = VERSION_2;
