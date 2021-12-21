@@ -241,15 +241,10 @@ impl PriceConf {
         let base_price = base.price as u64;
         let other_price = other.price as u64;
 
-        println!("----");
-        println!("base ({} +- {}) * 10^{}", base_price, base.conf, base.expo);
-        println!("other ({} +- {}) * 10^{}", other_price, other.conf, other.expo);
-
         // Compute the midprice, base in terms of other.
         // Uses at most 57 bits
         let midprice = base_price * PD_SCALE / other_price;
         let midprice_expo = PD_EXPO + base.expo - other.expo;
-        println!("mean {} * 10^{}", midprice, midprice_expo);
 
         // Compute the confidence interval.
         // This code uses the 1-norm instead of the 2-norm for computational reasons.
@@ -266,11 +261,9 @@ impl PriceConf {
 
         // at most 58 bits
         let confidence_pct = base_confidence_pct + other_confidence_pct;
-        println!("rescaled_z {} * 10^{}", confidence_pct, PD_EXPO);
         // at most 115 bits
         let conf = (confidence_pct as u128) * (midprice as u128);
         let conf_expo = PD_EXPO + midprice_expo;
-        println!("conf {} * 10^{}", conf, conf_expo);
 
         // Scale results to the target exponent.
         let midprice_in_result_expo = PriceConf::scale_to_exponent(midprice as u128, midprice_expo, result_expo);
