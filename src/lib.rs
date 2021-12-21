@@ -9,7 +9,6 @@ pub const PROD_ATTR_SIZE : usize = PROD_ACCT_SIZE - PROD_HDR_SIZE;
 // Constants for working with pyth's number representation
 const PD_EXPO: i32 = -9;
 const PD_SCALE: u64 = 1_000_000_000;
-const MAX_PD_V_I64: i64 = (1 << 28) - 1;
 const MAX_PD_V_U64: u64 = (1 << 28) - 1;
 
 // each account has its own type
@@ -376,7 +375,9 @@ impl AccKey
 
 #[cfg(test)]
 mod test {
-  use crate::{MAX_PD_V_I64, MAX_PD_V_U64, PriceConf, PD_SCALE, PD_EXPO};
+  use crate::{MAX_PD_V_U64, PriceConf, PD_SCALE, PD_EXPO};
+
+  const MAX_PD_V_I64: i64 = (1 << 28) - 1;
 
   fn pc(price: i64, conf: u64, expo: i32) -> PriceConf {
     PriceConf {
@@ -440,7 +441,6 @@ mod test {
     // Get the rounded versions of these inputs in order to compute the expected results.
     let normed = pc(i64::MAX, u64::MAX, 0).normalized().unwrap();
     let max_i64 = normed.price * (10_i64.pow(normed.expo as u32));
-    let max_u64 = normed.conf * (10_u64.pow(normed.expo as u32));
 
     test_succeeds(pc(i64::MAX, u64::MAX, 0), pc(i64::MAX, u64::MAX, 0), 0, (1, 4));
     test_succeeds(pc(i64::MAX, u64::MAX, 0), pc(1, 1, 0), 7, (max_i64 / ten_e7, 3 * ((max_i64 as u64) / uten_e7)));
