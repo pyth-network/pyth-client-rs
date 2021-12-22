@@ -38,11 +38,3 @@ product_account .. 6MEwdxe4g1NeAF9u6KDG14anJpFsVEa2cvr5H6iriFZ8
     twap ......... 7426390900
     twac ......... 2259870
 ```
-
-### Development
-
-```
-cargo test-bpf
-```
-
-
