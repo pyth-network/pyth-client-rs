@@ -7,30 +7,31 @@ use solana_program::{
     msg,
     pubkey::Pubkey,
 };
+use crate::{
+    instruction::PythClientInstruction,
+    PriceConf,
+};
+use borsh::BorshDeserialize;
 
-/// Instruction processor
 pub fn process_instruction(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
-    instruction_data: &[u8],
+    _program_id: &Pubkey,
+    _accounts: &[AccountInfo],
+    input: &[u8],
 ) -> ProgramResult {
-    // Log a string
-    msg!("static string");
-
-    // Log a slice
-    sol_log_slice(instruction_data);
-
-    // Log a formatted message, use with caution can be expensive
-    msg!("formatted {}: {:?}", "message", instruction_data);
-
-    // Log a public key
-    program_id.log();
-
-    // Log all the program's input parameters
-    sol_log_params(accounts, instruction_data);
-
-    // Log the number of compute units remaining that the program can consume.
-    sol_log_compute_units();
-
-    Ok(())
+    let instruction = PythClientInstruction::try_from_slice(input).unwrap();
+    match instruction {
+        PythClientInstruction::Divide { numerator, denominator } => {
+            msg!("Calculating numerator.div(denominator)");
+            sol_log_compute_units();
+            let result = numerator.div(&denominator);
+            sol_log_compute_units();
+            msg!("{:?}", result);
+            Ok(())
+        }
+        PythClientInstruction::Noop => {
+            msg!("Do nothing");
+            msg!("{}", 0_u64);
+            Ok(())
+        }
+    }
 }

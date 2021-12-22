@@ -1,5 +1,13 @@
+use {
+  borsh::{BorshDeserialize, BorshSerialize},
+};
+
 mod entrypoint;
 pub mod processor;
+pub mod instruction;
+
+// FIXME
+solana_program::declare_id!("PythC11111111111111111111111111111111111111");
 
 pub const MAGIC          : u32   = 0xa1b2c3d4;
 pub const VERSION_2      : u32   = 2;
@@ -202,8 +210,7 @@ impl Price {
  * PriceConf { price: 123, conf: 1, expo: 2 }; // represents 12300 +- 100
  * ```
  */
-#[derive(PartialEq)]
-#[derive(Debug)]
+#[derive(PartialEq, Debug, BorshSerialize, BorshDeserialize, Clone)]
 pub struct PriceConf {
   pub price: i64,
   pub conf: u64,
