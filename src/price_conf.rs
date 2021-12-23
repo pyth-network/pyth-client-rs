@@ -125,12 +125,9 @@ impl PriceConf {
     let base = self.normalize()?;
     let other = other.normalize()?;
 
-    // TODO: think about negative numbers
-    // FIXME: bitcounts
-
     // These use at most 27 bits each
-    let base_price = base.price;
-    let other_price = other.price;
+    let (base_price, base_sign) = PriceConf::to_unsigned(base.price);
+    let (other_price, other_sign) = PriceConf::to_unsigned(other.price);
 
     // Compute the midprice, base in terms of other.
     // Uses at most 27*2 bits
@@ -149,11 +146,10 @@ impl PriceConf {
     // Note that this simplifies to
     // pq * (a/p + b/q) = qa + bp
     // 27*2 + 1 bits
-    // FIXME: the u64s are hacks :(
-    let conf = base.conf * (other.price as u64) + other.conf * (base.price as u64);
+    let conf = base.conf * other_price + other.conf * base_price;
 
     Some(PriceConf {
-      price: midprice,
+      price: (midprice as i64) * base_sign * other_sign,
       conf,
       expo: midprice_expo,
     })
@@ -427,6 +423,8 @@ mod test {
       assert_eq!(result, None);
     }
 
+    // TODO: test negative numbers
+
     succeeds(pc(1, 1, 0), pc(1, 1, 0), pc(1, 2, 0));
     succeeds(pc(1, 1, -8), pc(1, 1, -8), pc(1, 2, -16));
     succeeds(pc(10, 1, 0), pc(1, 1, 0), pc(10, 11, 0));
@@ -437,9 +435,9 @@ mod test {
     succeeds(pc(100, 10, -8), pc(2, 1, -7), pc(200, 120, -15));
     succeeds(pc(100, 10, -4), pc(2, 1, 0), pc(200, 120, -4));
 
-    // Zero...
-    // FIXME: fails because normalization doesn't deal with signs at the moment.
-    // succeeds(pc(0, 10, -4), pc(2, 1, 0), pc(0, 20, -4));
+    // Zero
+    succeeds(pc(0, 10, -4), pc(2, 1, 0), pc(0, 20, -4));
+    succeeds(pc(2, 1, 0), pc(0, 10, -4), pc(0, 20, -4));
 
     // Test with end range of possible inputs where the output should not lose precision.
     succeeds(
