@@ -54,20 +54,17 @@ impl PriceConf {
     let base = self.normalize()?;
     let other = other.normalize()?;
 
-    // FIXME: negative numbers
-    // Note that normalization implies that the prices can be cast to u64.
-    // We need prices as u64 in order to divide, as solana doesn't implement signed division.
-    // It's also extremely unclear what this method should do if one of the prices is negative,
-    // so assuming positive prices throughout seems fine.
+    if other.price == 0 {
+      return None;
+    }
 
     // These use at most 27 bits each
-    let base_price = base.price as u64;
-    let other_price = other.price as u64;
+    let (base_price, base_sign) = PriceConf::to_unsigned(base.price);
+    let (other_price, other_sign) = PriceConf::to_unsigned(other.price);
 
     // Compute the midprice, base in terms of other.
     // Uses at most 57 bits
     let midprice = base_price * PD_SCALE / other_price;
-
     let midprice_expo = base.expo.checked_sub(other.expo)?.checked_add(PD_EXPO)?;
 
     // Compute the confidence interval.
@@ -80,23 +77,22 @@ impl PriceConf {
     // shouldn't matter considering that confidence intervals are typically ~0.1% of the price.
 
     // The exponent is PD_EXPO for both of these. Each of these uses 57 bits.
-    let base_confidence_pct: u64 = (base.conf * PD_SCALE) / base_price;
+    // let base_confidence_pct: u64 = (base.conf * PD_SCALE) / base_price;
     let other_confidence_pct: u64 = (other.conf * PD_SCALE) / other_price;
 
     // at most 58 bits
-    let confidence_pct = base_confidence_pct + other_confidence_pct;
+    // let confidence_pct = base_confidence_pct + other_confidence_pct;
     // at most 57 + 58 - 29 = 86 bits, with the same exponent as the midprice.
     // FIXME: round this up. There's a div_ceil method but it's unstable (?)
-    let conf = ((confidence_pct as u128) * (midprice as u128)) / (PD_SCALE as u128);
+    // let conf = ((confidence_pct as u128) * (midprice as u128)) / (PD_SCALE as u128);
+
+    let conf = (((base.conf * PD_SCALE) / other_price) as u128) + ((other_confidence_pct as u128) * (midprice as u128)) / (PD_SCALE as u128);
 
     // Note that this check only fails if an argument's confidence interval was >> its price,
     // in which case None is a reasonable result, as we have essentially 0 information about the price.
     if conf < (u64::MAX as u128) {
-      let m_i64 = midprice as i64;
-      // This should be guaranteed to succeed because midprice uses <= 57 bits
-      assert!(m_i64 >= 0);
       Some(PriceConf {
-        price: m_i64,
+        price: (midprice as i64) * base_sign * other_sign,
         conf: conf as u64,
         expo: midprice_expo,
       })
@@ -229,13 +225,20 @@ impl PriceConf {
       }
     }
   }
+
+  fn to_unsigned(x: i64) -> (u64, i64) {
+    assert!(x <= MAX_PD_V_I64 && x >= MIN_PD_V_I64);
+    if (x < 0) {
+      (-x as u64, -1)
+    } else {
+      (x as u64, 1)
+    }
+  }
 }
 
 #[cfg(test)]
 mod test {
-  use crate::price_conf::{MAX_PD_V_U64, PD_EXPO, PD_SCALE, PriceConf};
-
-  const MAX_PD_V_I64: i64 = (1 << 28) - 1;
+  use crate::price_conf::{MAX_PD_V_U64, MAX_PD_V_I64, MIN_PD_V_I64, PD_EXPO, PD_SCALE, PriceConf};
 
   fn pc(price: i64, conf: u64, expo: i32) -> PriceConf {
     PriceConf {
@@ -319,6 +322,11 @@ mod test {
     succeeds(pc(1, 1, 1), pc(1, 1, 0), pc_scaled(10, 20, 0, PD_EXPO + 1));
     succeeds(pc(1, 1, 0), pc(5, 1, 0), pc_scaled(20, 24, -2, PD_EXPO));
 
+    // Negative numbers
+    succeeds(pc(-1, 1, 0), pc(1, 1, 0), pc_scaled(-1, 2, 0, PD_EXPO));
+    succeeds(pc(1, 1, 0), pc(-1, 1, 0), pc_scaled(-1, 2, 0, PD_EXPO));
+    succeeds(pc(-1, 1, 0), pc(-1, 1, 0), pc_scaled(1, 2, 0, PD_EXPO));
+
     // Different exponents in the two inputs
     succeeds(pc(100, 10, -8), pc(2, 1, -7), pc_scaled(500_000_000, 300_000_000, -8, PD_EXPO - 1));
     succeeds(pc(100, 10, -4), pc(2, 1, 0), pc_scaled(500_000, 300_000, -8, PD_EXPO + -4));
@@ -329,6 +337,12 @@ mod test {
     succeeds(pc(1, 1, 0),
              pc(MAX_PD_V_I64, MAX_PD_V_U64, 0),
              pc((PD_SCALE as i64) / MAX_PD_V_I64, 2 * (PD_SCALE / MAX_PD_V_U64), PD_EXPO));
+
+    succeeds(pc(MIN_PD_V_I64, MAX_PD_V_U64, 0), pc(MIN_PD_V_I64, MAX_PD_V_U64, 0), pc_scaled(1, 2, 0, PD_EXPO));
+    succeeds(pc(MIN_PD_V_I64, MAX_PD_V_U64, 0), pc(1, 1, 0), pc_scaled(MIN_PD_V_I64, 2 * MAX_PD_V_U64, 0, PD_EXPO));
+    succeeds(pc(1, 1, 0),
+             pc(MIN_PD_V_I64, MAX_PD_V_U64, 0),
+             pc((PD_SCALE as i64) / MIN_PD_V_I64, 2 * (PD_SCALE / MAX_PD_V_U64), PD_EXPO));
 
     succeeds(pc(1, MAX_PD_V_U64, 0), pc(1, MAX_PD_V_U64, 0), pc_scaled(1, 2 * MAX_PD_V_U64, 0, PD_EXPO));
     // This fails because the confidence interval is too large to be represented in PD_EXPO
@@ -356,7 +370,6 @@ mod test {
              pc(i64::MAX, u64::MAX, 0),
              pc((PD_SCALE as i64) / normed.price, 3 * (PD_SCALE / (normed.price as u64)), PD_EXPO - normed.expo));
 
-    // FIXME: rounding the confidence to 0 may not be ideal here. Probably should guarantee this rounds up.
     succeeds(pc(i64::MAX, 1, 0), pc(i64::MAX, 1, 0), pc_scaled(1, 0, 0, PD_EXPO));
     succeeds(pc(i64::MAX, 1, 0),
              pc(1, 1, 0),
@@ -365,13 +378,20 @@ mod test {
              pc(i64::MAX, 1, 0),
              pc((PD_SCALE as i64) / normed.price, PD_SCALE / (normed.price as u64), PD_EXPO - normed.expo));
 
+    // TODO: negative number tests around i64::MIN
+
     // Price is zero pre-normalization
-    fails(pc(0, 1, 0), pc(1, 1, 0));
+    succeeds(pc(0, 1, 0), pc(1, 1, 0), pc_scaled(0, 1, 0, PD_EXPO));
+    succeeds(pc(0, 1, 0), pc(100, 1, 0), pc_scaled(0, 1, -2, PD_EXPO));
     fails(pc(1, 1, 0), pc(0, 1, 0));
 
-    // Can't normalize the input when the confidence is >> price.
+    // Normalizing the input when the confidence is >> price produces a price of 0.
     fails(pc(1, 1, 0), pc(1, u64::MAX, 0));
-    fails(pc(1, u64::MAX, 0), pc(1, 1, 0));
+    succeeds(
+      pc(1, u64::MAX, 0),
+      pc(1, 1, 0),
+      pc_scaled(0, normed.conf, normed.expo, normed.expo + PD_EXPO)
+    );
 
     // Exponent under/overflow.
     succeeds(pc(1, 1, i32::MAX), pc(1, 1, 0), pc(PD_SCALE as i64, 2 * PD_SCALE, i32::MAX + PD_EXPO));
@@ -464,7 +484,6 @@ mod test {
              pc(1, 1, 0),
              pc(normed.price, 3 * (normed.price as u64), normed.expo));
 
-    // FIXME: rounding the confidence to 0 is not be ideal here. Probably should guarantee this rounds up.
     succeeds(
       pc(i64::MAX, 1, 0),
       pc(i64::MAX, 1, 0),
