@@ -63,6 +63,7 @@ impl PriceConf {
         // Compute the midprice, base in terms of other.
         // Uses at most 57 bits
         let midprice = base_price * PD_SCALE / other_price;
+        // FIXME: Exponent computations can overflow
         let midprice_expo = PD_EXPO + base.expo - other.expo;
 
         // Compute the confidence interval.
@@ -135,6 +136,7 @@ impl PriceConf {
 
         // Compute the midprice, base in terms of other.
         // Uses at most 27*2 bits
+        // FIXME: Exponent computations can overflow
         let midprice = base_price * other_price;
         let midprice_expo = base.expo + other.expo;
 
@@ -150,7 +152,8 @@ impl PriceConf {
         // Note that this simplifies to
         // pq * (a/p + b/q) = qa + bp
         // 27*2 + 1 bits
-        let conf = base.conf * other.price + other.conf * base.price;
+        // FIXME: the u64s are hacks :(
+        let conf = base.conf * (other.price as u64) + other.conf * (base.price as u64);
 
         Some(PriceConf {
           price: midprice,
@@ -375,52 +378,67 @@ mod test {
     succeeds(pc(1, 1, 0), pc(5, 1, 0), pc(5, 6, 0));
 
     // Different exponents in the two inputs
-    /*
-    succeeds(pc(100, 10, -8), pc(2, 1, -7), pc_scaled(500_000_000, 300_000_000, -8, PD_EXPO - 1));
-    succeeds(pc(100, 10, -4), pc(2, 1, 0), pc_scaled(500_000, 300_000, -8, PD_EXPO + -4));
+    succeeds(pc(100, 10, -8), pc(2, 1, -7), pc(200, 120, -15));
+    succeeds(pc(100, 10, -4), pc(2, 1, 0), pc(200, 120, -4));
+
+    // Zero...
+    // FIXME: fails because normalization doesn't deal with signs at the moment.
+    // succeeds(pc(0, 10, -4), pc(2, 1, 0), pc(0, 20, -4));
 
     // Test with end range of possible inputs where the output should not lose precision.
-    succeeds(pc(MAX_PD_V_I64, MAX_PD_V_U64, 0), pc(MAX_PD_V_I64, MAX_PD_V_U64, 0), pc_scaled(1, 2, 0, PD_EXPO));
-    succeeds(pc(MAX_PD_V_I64, MAX_PD_V_U64, 0), pc(1, 1, 0), pc_scaled(MAX_PD_V_I64, 2 * MAX_PD_V_U64, 0, PD_EXPO));
-    succeeds(pc(1, 1, 0),
-             pc(MAX_PD_V_I64, MAX_PD_V_U64, 0),
-             pc((PD_SCALE as i64) / MAX_PD_V_I64, 2 * (PD_SCALE / MAX_PD_V_U64), PD_EXPO));
+    succeeds(
+      pc(MAX_PD_V_I64, MAX_PD_V_U64, 0),
+      pc(MAX_PD_V_I64, MAX_PD_V_U64, 0),
+      pc(MAX_PD_V_I64 * MAX_PD_V_I64, 2 * MAX_PD_V_U64 * MAX_PD_V_U64, 0)
+    );
+    succeeds(pc(MAX_PD_V_I64, MAX_PD_V_U64, 0), pc(1, 1, 0), pc(MAX_PD_V_I64, 2 * MAX_PD_V_U64, 0));
+    succeeds(
+      pc(1, MAX_PD_V_U64, 0),
+      pc(3, 1, 0),
+      pc(3, 1 + 3 * MAX_PD_V_U64, 0)
+    );
 
-    succeeds(pc(1, MAX_PD_V_U64, 0), pc(1, MAX_PD_V_U64, 0), pc_scaled(1, 2 * MAX_PD_V_U64, 0, PD_EXPO));
-    // This fails because the confidence interval is too large to be represented in PD_EXPO
-    fails(pc(MAX_PD_V_I64, MAX_PD_V_U64, 0), pc(1, MAX_PD_V_U64, 0));
+    succeeds(pc(1, MAX_PD_V_U64, 0), pc(1, MAX_PD_V_U64, 0), pc(1, 2 * MAX_PD_V_U64, 0));
+    succeeds(
+      pc(MAX_PD_V_I64, MAX_PD_V_U64, 0),
+      pc(1, MAX_PD_V_U64, 0),
+      pc(MAX_PD_V_I64, MAX_PD_V_U64 + MAX_PD_V_U64 * MAX_PD_V_U64, 0)
+    );
 
     // Unnormalized tests below here
-
-    // More realistic inputs (get BTC price in ETH)
     let ten_e7: i64 = 10000000;
     let uten_e7: u64 = 10000000;
-    succeeds(pc(520010 * ten_e7, 310 * uten_e7, -8),
-             pc(38591 * ten_e7, 18 * uten_e7, -8),
-             pc(1347490347, 1431804, -8));
+    succeeds(
+      pc(3 * (PD_SCALE as i64), 3 * PD_SCALE, PD_EXPO),
+      pc(2 * (PD_SCALE as i64), 4 * PD_SCALE, PD_EXPO),
+      pc(6 * ten_e7 * ten_e7, 18 * uten_e7 * uten_e7, -14)
+    );
 
     // Test with end range of possible inputs to identify overflow
     // These inputs will lose precision due to the initial normalization.
     // Get the rounded versions of these inputs in order to compute the expected results.
     let normed = pc(i64::MAX, u64::MAX, 0).normalize().unwrap();
 
-    succeeds(pc(i64::MAX, u64::MAX, 0), pc(i64::MAX, u64::MAX, 0), pc_scaled(1, 4, 0, PD_EXPO));
+    succeeds(
+      pc(i64::MAX, u64::MAX, 0),
+      pc(i64::MAX, u64::MAX, 0),
+      pc(normed.price * normed.price, 4 * ((normed.price * normed.price) as u64), normed.expo * 2)
+    );
     succeeds(pc(i64::MAX, u64::MAX, 0),
              pc(1, 1, 0),
-             pc_scaled(normed.price, 3 * (normed.price as u64), normed.expo, normed.expo + PD_EXPO));
-    succeeds(pc(1, 1, 0),
-             pc(i64::MAX, u64::MAX, 0),
-             pc((PD_SCALE as i64) / normed.price, 3 * (PD_SCALE / (normed.price as u64)), PD_EXPO - normed.expo));
+             pc(normed.price, 3 * (normed.price as u64), normed.expo));
 
-    // FIXME: rounding the confidence to 0 may not be ideal here. Probably should guarantee this rounds up.
-    succeeds(pc(i64::MAX, 1, 0), pc(i64::MAX, 1, 0), pc_scaled(1, 0, 0, PD_EXPO));
+    // FIXME: rounding the confidence to 0 is not be ideal here. Probably should guarantee this rounds up.
+    succeeds(
+      pc(i64::MAX, 1, 0),
+      pc(i64::MAX, 1, 0),
+      pc(normed.price * normed.price, 0, normed.expo * 2)
+    );
     succeeds(pc(i64::MAX, 1, 0),
              pc(1, 1, 0),
-             pc_scaled(normed.price, normed.price as u64, normed.expo, normed.expo + PD_EXPO));
-    succeeds(pc(1, 1, 0),
-             pc(i64::MAX, 1, 0),
-             pc((PD_SCALE as i64) / normed.price, PD_SCALE / (normed.price as u64), PD_EXPO - normed.expo));
+             pc(normed.price, normed.price as u64, normed.expo));
 
+    /*
     // Price is zero pre-normalization
     fails(pc(0, 1, 0), pc(1, 1, 0));
     fails(pc(1, 1, 0), pc(0, 1, 0));
@@ -431,7 +449,6 @@ mod test {
 
     // FIXME: move to scaling tests
     // Result exponent too small
-    /*
     test_succeeds(pc(1, 1, 0), pc(1, 1, 0), PD_EXPO, (1 * (PD_SCALE as i64), 2 * PD_SCALE));
     test_fails(pc(1, 1, 0), pc(1, 1, 0), PD_EXPO - 1);
     */
