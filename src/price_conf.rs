@@ -6,6 +6,8 @@ use {
 const PD_EXPO: i32 = -9;
 const PD_SCALE: u64 = 1_000_000_000;
 const MAX_PD_V_U64: u64 = (1 << 28) - 1;
+const MAX_PD_V_I64: i64 = MAX_PD_V_U64 as i64;
+const MIN_PD_V_I64: i64 = -MAX_PD_V_I64;
 
 /**
  * A price with a degree of uncertainty, represented as a price +- a confidence interval.
@@ -117,7 +119,7 @@ impl PriceConf {
 
   // multiply by a constant
   pub fn cmul(&self, c: i64, e: i32) -> Option<PriceConf> {
-    self.mul(&PriceConf { price: c, conf: 0, expo: e})
+    self.mul(&PriceConf { price: c, conf: 0, expo: e })
   }
 
   pub fn mul(&self, other: &PriceConf) -> Option<PriceConf> {
@@ -163,36 +165,24 @@ impl PriceConf {
 
   /**
    * Get a copy of this struct where the price and confidence
-   * have been normalized to be less than `MAX_PD_V_U64`.
-   * Returns `None` if `price == 0` before or after normalization.
-   * FIXME: tests
+   * have been normalized to be between MIN_PD_V_I64 and MAX_PD_V_I64.
    */
   pub fn normalize(&self) -> Option<PriceConf> {
-    if self.price > 0 {
-      // FIXME: support negative numbers.
-      let mut p: u64 = self.price as u64;
-      let mut c: u64 = self.conf;
-      let mut e: i32 = self.expo;
+    let mut p = self.price;
+    let mut c = self.conf;
+    let mut e = self.expo;
 
-      while p > MAX_PD_V_U64 || c > MAX_PD_V_U64 {
-        p = p / 10;
-        c = c / 10;
-        e += 1;
-      }
-
-      // Can get p == 0 if confidence is >> price.
-      if p > 0 {
-        Some(PriceConf {
-          price: p as i64,
-          conf: c,
-          expo: e,
-        })
-      } else {
-        None
-      }
-    } else {
-      None
+    while p > MAX_PD_V_I64 || p < MIN_PD_V_I64 || c > MAX_PD_V_U64 {
+      p = p / 10;
+      c = c / 10;
+      e = e.checked_add(1)?;
     }
+
+    Some(PriceConf {
+      price: p,
+      conf: c,
+      expo: e,
+    })
   }
 
   /**
@@ -261,6 +251,43 @@ mod test {
       conf: conf,
       expo: cur_expo,
     }.scale_to_exponent(expo).unwrap()
+  }
+
+  #[test]
+  fn test_normalize() {
+    fn succeeds(
+      price1: PriceConf,
+      expected: PriceConf,
+    ) {
+      assert_eq!(price1.normalize().unwrap(), expected);
+    }
+
+    fn fails(
+      price1: PriceConf,
+    ) {
+      assert_eq!(price1.normalize(), None);
+    }
+
+    succeeds(
+      pc((PD_SCALE as i64) * 2, PD_SCALE * 3, 0),
+      pc(2 * (PD_SCALE as i64) / 100, 3 * PD_SCALE / 100, 2)
+    );
+    
+    // the max values are a factor of 10^11 larger than MAX_PD_V
+    let expo = -(PD_EXPO - 2);
+    let scale_i64 = (PD_SCALE as i64) * 100;
+    let scale_u64 = scale_i64 as u64;
+    succeeds(pc(i64::MAX, 1, 0), pc(i64::MAX / scale_i64, 0, expo));
+    succeeds(pc(i64::MIN, 1, 0), pc(i64::MIN / scale_i64, 0, expo));
+    succeeds(pc(1, u64::MAX, 0), pc(0, u64::MAX / scale_u64, expo));
+
+    // exponent overflows
+    succeeds(pc(i64::MAX, 1, i32::MAX - expo), pc(i64::MAX / scale_i64, 0, i32::MAX));
+    fails(pc(i64::MAX, 1, i32::MAX - expo + 1));
+    succeeds(pc(i64::MAX, 1, i32::MIN), pc(i64::MAX / scale_i64, 0, i32::MIN + expo));
+
+    succeeds(pc(1, u64::MAX, i32::MAX - expo), pc(0, u64::MAX / scale_u64, i32::MAX));
+    fails(pc(1, u64::MAX, i32::MAX - expo + 1));
   }
 
   #[test]
