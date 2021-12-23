@@ -180,6 +180,8 @@ impl PriceConf {
   /**
    * Scale num so that its exponent is target_expo.
    * FIXME: tests
+   * TODO: exponent overflow
+   * TODO: should confidences always be ceiled when divided (??)
    */
   pub fn scale_to_exponent(
     &self,
