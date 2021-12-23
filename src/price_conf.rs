@@ -269,10 +269,15 @@ mod test {
     }
 
     succeeds(
-      pc((PD_SCALE as i64) * 2, PD_SCALE * 3, 0),
+      pc(2 * (PD_SCALE as i64), 3 * PD_SCALE, 0),
       pc(2 * (PD_SCALE as i64) / 100, 3 * PD_SCALE / 100, 2)
     );
-    
+
+    succeeds(
+      pc(-2 * (PD_SCALE as i64), 3 * PD_SCALE, 0),
+      pc(-2 * (PD_SCALE as i64) / 100, 3 * PD_SCALE / 100, 2)
+    );
+
     // the max values are a factor of 10^11 larger than MAX_PD_V
     let expo = -(PD_EXPO - 2);
     let scale_i64 = (PD_SCALE as i64) * 100;
