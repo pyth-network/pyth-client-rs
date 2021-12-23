@@ -36,7 +36,7 @@ async fn test_noop() {
 async fn test_div() {
     test_instr(instruction::divide(
         PriceConf {
-            price: 1,
+            price: i64::MAX,
             conf: 1,
             expo: 0
         },

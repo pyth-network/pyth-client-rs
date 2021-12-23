@@ -319,7 +319,7 @@ impl PriceConf {
    */
   pub fn normalize(&self) -> Option<PriceConf> {
     if self.price > 0 {
-      // BPF only supports unsigned division
+      // FIXME: support negative numbers.
       let mut p: u64 = self.price as u64;
       let mut c: u64 = self.conf;
       let mut e: i32 = self.expo;

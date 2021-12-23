@@ -25,7 +25,7 @@ pub fn process_instruction(
             sol_log_compute_units();
             let result = numerator.div(&denominator);
             sol_log_compute_units();
-            msg!("{:?}", result);
+            msg!("result: {:?}", result);
             Ok(())
         }
         PythClientInstruction::Noop => {
