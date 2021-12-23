@@ -49,58 +49,57 @@ impl PriceConf {
     // PriceConf is not guaranteed to store its price/confidence in normalized form.
     // Normalize them here to bound the range of price/conf, which is required to perform
     // arithmetic operations.
-    match (self.normalize(), other.normalize()) {
-      (Some(base), Some(other)) => {
-        // Note that normalization implies that the prices can be cast to u64.
-        // We need prices as u64 in order to divide, as solana doesn't implement signed division.
-        // It's also extremely unclear what this method should do if one of the prices is negative,
-        // so assuming positive prices throughout seems fine.
+    let base = self.normalize()?;
+    let other = other.normalize()?;
 
-        // These use at most 27 bits each
-        let base_price = base.price as u64;
-        let other_price = other.price as u64;
+    // FIXME: negative numbers
+    // Note that normalization implies that the prices can be cast to u64.
+    // We need prices as u64 in order to divide, as solana doesn't implement signed division.
+    // It's also extremely unclear what this method should do if one of the prices is negative,
+    // so assuming positive prices throughout seems fine.
 
-        // Compute the midprice, base in terms of other.
-        // Uses at most 57 bits
-        let midprice = base_price * PD_SCALE / other_price;
-        // FIXME: Exponent computations can overflow
-        let midprice_expo = PD_EXPO + base.expo - other.expo;
+    // These use at most 27 bits each
+    let base_price = base.price as u64;
+    let other_price = other.price as u64;
 
-        // Compute the confidence interval.
-        // This code uses the 1-norm instead of the 2-norm for computational reasons.
-        // The correct formula is midprice * sqrt(c_1^2 + c_2^2), where c_1 and c_2 are the
-        // confidence intervals in price-percentage terms of the base and other. This quantity
-        // is difficult to compute due to the sqrt, and overflow/underflow considerations.
-        // Instead, this code uses midprice * (c_1 + c_2).
-        // This quantity is at most a factor of sqrt(2) greater than the correct result, which
-        // shouldn't matter considering that confidence intervals are typically ~0.1% of the price.
+    // Compute the midprice, base in terms of other.
+    // Uses at most 57 bits
+    let midprice = base_price * PD_SCALE / other_price;
 
-        // The exponent is PD_EXPO for both of these. Each of these uses 57 bits.
-        let base_confidence_pct: u64 = (base.conf * PD_SCALE) / base_price;
-        let other_confidence_pct: u64 = (other.conf * PD_SCALE) / other_price;
+    let midprice_expo = base.expo.checked_sub(other.expo)?.checked_add(PD_EXPO)?;
 
-        // at most 58 bits
-        let confidence_pct = base_confidence_pct + other_confidence_pct;
-        // at most 57 + 58 - 29 = 86 bits, with the same exponent as the midprice.
-        // FIXME: round this up. There's a div_ceil method but it's unstable (?)
-        let conf = ((confidence_pct as u128) * (midprice as u128)) / (PD_SCALE as u128);
+    // Compute the confidence interval.
+    // This code uses the 1-norm instead of the 2-norm for computational reasons.
+    // The correct formula is midprice * sqrt(c_1^2 + c_2^2), where c_1 and c_2 are the
+    // confidence intervals in price-percentage terms of the base and other. This quantity
+    // is difficult to compute due to the sqrt, and overflow/underflow considerations.
+    // Instead, this code uses midprice * (c_1 + c_2).
+    // This quantity is at most a factor of sqrt(2) greater than the correct result, which
+    // shouldn't matter considering that confidence intervals are typically ~0.1% of the price.
 
-        // Note that this check only fails if an argument's confidence interval was >> its price,
-        // in which case None is a reasonable result, as we have essentially 0 information about the price.
-        if conf < (u64::MAX as u128) {
-          let m_i64 = midprice as i64;
-          // This should be guaranteed to succeed because midprice uses <= 57 bits
-          assert!(m_i64 >= 0);
-          Some(PriceConf {
-            price: m_i64,
-            conf: conf as u64,
-            expo: midprice_expo,
-          })
-        } else {
-          None
-        }
-      }
-      (_, _) => None
+    // The exponent is PD_EXPO for both of these. Each of these uses 57 bits.
+    let base_confidence_pct: u64 = (base.conf * PD_SCALE) / base_price;
+    let other_confidence_pct: u64 = (other.conf * PD_SCALE) / other_price;
+
+    // at most 58 bits
+    let confidence_pct = base_confidence_pct + other_confidence_pct;
+    // at most 57 + 58 - 29 = 86 bits, with the same exponent as the midprice.
+    // FIXME: round this up. There's a div_ceil method but it's unstable (?)
+    let conf = ((confidence_pct as u128) * (midprice as u128)) / (PD_SCALE as u128);
+
+    // Note that this check only fails if an argument's confidence interval was >> its price,
+    // in which case None is a reasonable result, as we have essentially 0 information about the price.
+    if conf < (u64::MAX as u128) {
+      let m_i64 = midprice as i64;
+      // This should be guaranteed to succeed because midprice uses <= 57 bits
+      assert!(m_i64 >= 0);
+      Some(PriceConf {
+        price: m_i64,
+        conf: conf as u64,
+        expo: midprice_expo,
+      })
+    } else {
+      None
     }
   }
 
@@ -125,44 +124,41 @@ impl PriceConf {
     // PriceConf is not guaranteed to store its price/confidence in normalized form.
     // Normalize them here to bound the range of price/conf, which is required to perform
     // arithmetic operations.
-    match (self.normalize(), other.normalize()) {
-      (Some(base), Some(other)) => {
-        // TODO: think about negative numbers
-        // FIXME: bitcounts
+    let base = self.normalize()?;
+    let other = other.normalize()?;
 
-        // These use at most 27 bits each
-        let base_price = base.price;
-        let other_price = other.price;
+    // TODO: think about negative numbers
+    // FIXME: bitcounts
 
-        // Compute the midprice, base in terms of other.
-        // Uses at most 27*2 bits
-        // FIXME: Exponent computations can overflow
-        let midprice = base_price * other_price;
-        let midprice_expo = base.expo + other.expo;
+    // These use at most 27 bits each
+    let base_price = base.price;
+    let other_price = other.price;
 
-        // Compute the confidence interval.
-        // This code uses the 1-norm instead of the 2-norm for computational reasons.
-        // The correct formula is midprice * sqrt(c_1^2 + c_2^2), where c_1 and c_2 are the
-        // confidence intervals in price-percentage terms of the base and other. This quantity
-        // is difficult to compute due to the sqrt, and overflow/underflow considerations.
-        // Instead, this code uses midprice * (c_1 + c_2).
-        // This quantity is at most a factor of sqrt(2) greater than the correct result, which
-        // shouldn't matter considering that confidence intervals are typically ~0.1% of the price.
-        //
-        // Note that this simplifies to
-        // pq * (a/p + b/q) = qa + bp
-        // 27*2 + 1 bits
-        // FIXME: the u64s are hacks :(
-        let conf = base.conf * (other.price as u64) + other.conf * (base.price as u64);
+    // Compute the midprice, base in terms of other.
+    // Uses at most 27*2 bits
+    let midprice = base_price * other_price;
+    let midprice_expo = base.expo.checked_add(other.expo)?;
 
-        Some(PriceConf {
-          price: midprice,
-          conf,
-          expo: midprice_expo,
-        })
-      }
-      (_, _) => None
-    }
+    // Compute the confidence interval.
+    // This code uses the 1-norm instead of the 2-norm for computational reasons.
+    // The correct formula is midprice * sqrt(c_1^2 + c_2^2), where c_1 and c_2 are the
+    // confidence intervals in price-percentage terms of the base and other. This quantity
+    // is difficult to compute due to the sqrt, and overflow/underflow considerations.
+    // Instead, this code uses midprice * (c_1 + c_2).
+    // This quantity is at most a factor of sqrt(2) greater than the correct result, which
+    // shouldn't matter considering that confidence intervals are typically ~0.1% of the price.
+    //
+    // Note that this simplifies to
+    // pq * (a/p + b/q) = qa + bp
+    // 27*2 + 1 bits
+    // FIXME: the u64s are hacks :(
+    let conf = base.conf * (other.price as u64) + other.conf * (base.price as u64);
+
+    Some(PriceConf {
+      price: midprice,
+      conf,
+      expo: midprice_expo,
+    })
   }
 
   /**
@@ -345,6 +341,14 @@ mod test {
     fails(pc(1, 1, 0), pc(1, u64::MAX, 0));
     fails(pc(1, u64::MAX, 0), pc(1, 1, 0));
 
+    // Exponent under/overflow.
+    succeeds(pc(1, 1, i32::MAX), pc(1, 1, 0), pc(PD_SCALE as i64, 2 * PD_SCALE, i32::MAX + PD_EXPO));
+    fails(pc(1, 1, i32::MAX), pc(1, 1, -1));
+
+    succeeds(pc(1, 1, i32::MIN - PD_EXPO), pc(1, 1, 0), pc(PD_SCALE as i64, 2 * PD_SCALE, i32::MIN));
+    succeeds(pc(1, 1, i32::MIN), pc(1, 1, PD_EXPO), pc(PD_SCALE as i64, 2 * PD_SCALE, i32::MIN));
+    fails(pc(1, 1, i32::MIN - PD_EXPO), pc(1, 1, 1));
+
     // FIXME: move to scaling tests
     // Result exponent too small
     /*
@@ -437,6 +441,16 @@ mod test {
     succeeds(pc(i64::MAX, 1, 0),
              pc(1, 1, 0),
              pc(normed.price, normed.price as u64, normed.expo));
+
+    // Exponent under/overflow.
+    succeeds(pc(1, 1, i32::MAX), pc(1, 1, 0), pc(1, 2, i32::MAX));
+    succeeds(pc(1, 1, i32::MAX), pc(1, 1, -1), pc(1, 2, i32::MAX - 1));
+    fails(pc(1, 1, i32::MAX), pc(1, 1, 1));
+
+    succeeds(pc(1, 1, i32::MIN), pc(1, 1, 0), pc(1, 2, i32::MIN));
+    succeeds(pc(1, 1, i32::MIN), pc(1, 1, 1), pc(1, 2, i32::MIN + 1));
+    fails(pc(1, 1, i32::MIN), pc(1, 1, -1));
+
 
     /*
     // Price is zero pre-normalization
