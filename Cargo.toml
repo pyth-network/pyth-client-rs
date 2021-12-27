@@ -18,7 +18,6 @@ no-entrypoint = []
 solana-program = "1.8.1"
 borsh = "0.9"
 borsh-derive = "0.9.0"
-num-integer = "0.1.44"
 
 [dev-dependencies]
 solana-program-test = "1.8.1"
