@@ -163,6 +163,19 @@ impl Price {
   }
 
   /**
+   * Get the time-weighted average price (TWAP) and a confidence interval on the result.
+   * Returns None if the twap is currently unavailable.
+   *
+   * At the moment, the confidence interval returned by this method is computed in
+   * a somewhat questionable way, so we do not recommend using it for high-value applications.
+   */
+  pub fn get_twap(&self) -> Option<PriceConf> {
+    // This method currently cannot return None, but may do so in the future.
+    // Note that the twac is a positive number in i64, so safe to cast to u64.
+    Some(PriceConf { price: self.twap.val, conf: self.twac.val as u64, expo: self.expo })
+  }
+
+  /**
    * Get the current price of this account in a different quote currency. If this account
    * represents the price of the product X/Z, and `quote` represents the price of the product Y/Z,
    * this method returns the price of X/Y. Use this method to get the price of e.g., mSOL/SOL from
@@ -181,16 +194,21 @@ impl Price {
   }
 
   /**
-   * Get the time-weighted average price (TWAP) and a confidence interval on the result.
-   * Returns None if the twap is currently unavailable.
+   * Get the price of a basket of currencies. Each entry in `amounts` is of the form
+   * `(price, qty, qty_expo)`, and the result is the sum of `price * qty * 10^qty_expo`.
+   * The result is returned with exponent `result_expo`.
    *
-   * At the moment, the confidence interval returned by this method is computed in
-   * a somewhat questionable way, so we do not recommend using it for high-value applications.
+   * An example use case for this function is to get the value of an LP token.
    */
-  pub fn get_twap(&self) -> Option<PriceConf> {
-    // This method currently cannot return None, but may do so in the future.
-    // Note that the twac is a positive number in i64, so safe to cast to u64.
-    Some(PriceConf { price: self.twap.val, conf: self.twac.val as u64, expo: self.expo })
+  pub fn price_basket(amounts: &[(Price, i64, i32)], result_expo: i32) -> Option<PriceConf> {
+    assert!(amounts.len() > 0);
+    let mut res = PriceConf { price: 0, conf: 0, expo: result_expo };
+    for i in 0..amounts.len() {
+      res = res.add(
+        &amounts[i].0.get_current_price()?.cmul(amounts[i].1, amounts[i].2)?.scale_to_exponent(result_expo)?
+      )?
+    }
+    Some(res)
   }
 }
 

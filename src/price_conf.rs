@@ -83,9 +83,6 @@ impl PriceConf {
     // at most 58 bits
     // let confidence_pct = base_confidence_pct + other_confidence_pct;
     // at most 57 + 58 - 29 = 86 bits, with the same exponent as the midprice.
-    // FIXME: round this up. There's a div_ceil method but it's unstable (?)
-    // let conf = ((confidence_pct as u128) * (midprice as u128)) / (PD_SCALE as u128);
-
     let conf = (((base.conf * PD_SCALE) / other_price) as u128) + ((other_confidence_pct as u128) * (midprice as u128)) / (PD_SCALE as u128);
 
     // Note that this check only fails if an argument's confidence interval was >> its price,
@@ -101,23 +98,30 @@ impl PriceConf {
     }
   }
 
-  // FIXME Implement these functions
-  // The idea is that you should be able to get the price of a mixture of tokens (e.g., for LP tokens)
-  // using something like:
-  // price1.scale_to_exponent(result_expo).cmul(qty1, 0).add(
-  //   price2.scale_to_exponent(result_expo).cmul(qty2, 0)
-  // )
-  //
-  // Add two PriceConfs assuming the expos are ==
-  pub fn add(&self, other: PriceConf) -> Option<PriceConf> {
-    panic!()
+  /**
+   * Add `other` to this, propagating uncertainty in both prices. Requires both
+   * `PriceConf`s to have the same exponent -- use `scale_to_exponent` on the arguments
+   * if necessary.
+   */
+  pub fn add(&self, other: &PriceConf) -> Option<PriceConf> {
+    assert_eq!(self.expo, other.expo);
+
+    let price = self.price.checked_add(other.price)?;
+    // The conf should technically be sqrt(a^2 + b^2), but that's harder to compute.
+    let conf = self.conf.checked_add(other.conf)?;
+    Some(PriceConf {
+      price,
+      conf,
+      expo: self.expo,
+    })
   }
 
-  // multiply by a constant
+  /** Multiply this `PriceConf` by a constant `c * 10^e`. */
   pub fn cmul(&self, c: i64, e: i32) -> Option<PriceConf> {
     self.mul(&PriceConf { price: c, conf: 0, expo: e })
   }
 
+  /** Multiply this `PriceConf` by `other`, propagating any uncertainty. */
   pub fn mul(&self, other: &PriceConf) -> Option<PriceConf> {
     // PriceConf is not guaranteed to store its price/confidence in normalized form.
     // Normalize them here to bound the range of price/conf, which is required to perform
@@ -157,7 +161,7 @@ impl PriceConf {
 
   /**
    * Get a copy of this struct where the price and confidence
-   * have been normalized to be between MIN_PD_V_I64 and MAX_PD_V_I64.
+   * have been normalized to be between `MIN_PD_V_I64` and `MAX_PD_V_I64`.
    */
   pub fn normalize(&self) -> Option<PriceConf> {
     let mut p = self.price;
@@ -178,16 +182,18 @@ impl PriceConf {
   }
 
   /**
-   * Scale num so that its exponent is target_expo.
-   * FIXME: tests
-   * TODO: exponent overflow
-   * TODO: should confidences always be ceiled when divided (??)
+   * Scale this price/confidence so that its exponent is `target_expo`. Return `None` if
+   * this number is outside the range of numbers representable in `target_expo`, which will
+   * happen if `target_expo` is too small.
+   *
+   * Warning: if `target_expo` is significantly larger than the current exponent, this function
+   * will return 0 +- 0.
    */
   pub fn scale_to_exponent(
     &self,
     target_expo: i32,
   ) -> Option<PriceConf> {
-    let mut delta = target_expo - self.expo;
+    let mut delta = target_expo.checked_sub(self.expo)?;
     if delta >= 0 {
       let mut p = self.price;
       let mut c = self.conf;
@@ -196,7 +202,7 @@ impl PriceConf {
         c /= 10;
         delta -= 1;
       }
-      // FIXME: check for 0s here and handle this case more gracefully. (0, 0) is a bad answer that will cause bugs
+
       Some(PriceConf {
         price: p,
         conf: c,
@@ -294,6 +300,41 @@ mod test {
 
     succeeds(pc(1, u64::MAX, i32::MAX - expo), pc(0, u64::MAX / scale_u64, i32::MAX));
     fails(pc(1, u64::MAX, i32::MAX - expo + 1));
+  }
+
+  #[test]
+  fn test_scale_to_exponent() {
+    fn succeeds(
+      price1: PriceConf,
+      target: i32,
+      expected: PriceConf,
+    ) {
+      assert_eq!(price1.scale_to_exponent(target).unwrap(), expected);
+    }
+
+    fn fails(
+      price1: PriceConf,
+      target: i32,
+    ) {
+      assert_eq!(price1.scale_to_exponent(target), None);
+    }
+
+    succeeds(pc(1234, 1234, 0), 0, pc(1234, 1234, 0));
+    succeeds(pc(1234, 1234, 0), 1, pc(123, 123, 1));
+    succeeds(pc(1234, 1234, 0), 2, pc(12, 12, 2));
+    succeeds(pc(-1234, 1234, 0), 2, pc(-12, 12, 2));
+    // TODO: confidence rounding question
+    succeeds(pc(1234, 1234, 0), 4, pc(0, 0, 4));
+    succeeds(pc(1234, 1234, 0), -1, pc(12340, 12340, -1));
+    succeeds(pc(1234, 1234, 0), -2, pc(123400, 123400, -2));
+    succeeds(pc(1234, 1234, 0), -8, pc(123400000000, 123400000000, -8));
+    // insufficient precision to represent the result in this exponent
+    fails(pc(1234, 1234, 0), -20);
+    fails(pc(1234, 0, 0), -20);
+    fails(pc(0, 1234, 0), -20);
+
+    // fails because exponent delta overflows
+    fails(pc(1, 1, i32::MIN), i32::MAX);
   }
 
   #[test]
