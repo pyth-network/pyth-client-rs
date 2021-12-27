@@ -1,14 +1,10 @@
-use {
-  borsh::{BorshDeserialize, BorshSerialize},
-};
+pub use self::price_conf::PriceConf;
 
 mod entrypoint;
 pub mod processor;
 pub mod instruction;
 
 mod price_conf;
-pub use self::price_conf::PriceConf;
-
 solana_program::declare_id!("PythC11111111111111111111111111111111111111");
 
 pub const MAGIC          : u32   = 0xa1b2c3d4;

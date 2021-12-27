@@ -1,14 +1,14 @@
 use {
+    borsh::BorshDeserialize,
+    pyth_client::{id, instruction, PriceConf},
+    pyth_client::processor::process_instruction,
     solana_program::{
         instruction::{AccountMeta, Instruction},
         pubkey::Pubkey,
     },
     solana_program_test::*,
     solana_sdk::{signature::Signer, transaction::Transaction},
-    pyth_client::processor::process_instruction,
     std::str::FromStr,
-    borsh::BorshDeserialize,
-    pyth_client::{id, instruction, PriceConf},
 };
 
 async fn test_instr(instr: Instruction) {
@@ -44,6 +44,22 @@ async fn test_div() {
             price: 1,
             conf: 1,
             expo: 0
+        }
+    )).await;
+}
+
+#[tokio::test]
+async fn test_mul() {
+    test_instr(instruction::multiply(
+        PriceConf {
+            price: 100,
+            conf: 1,
+            expo: 2
+        },
+        PriceConf {
+            price: 123,
+            conf: 1,
+            expo: -2
         }
     )).await;
 }
