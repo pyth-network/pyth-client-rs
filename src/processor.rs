@@ -29,7 +29,7 @@ pub fn process_instruction(
       Ok(())
     }
     PythClientInstruction::Multiply { x, y } => {
-      msg!("Calculating numerator.div(denominator)");
+      msg!("Calculating numerator.mul(denominator)");
       sol_log_compute_units();
       let result = x.mul(&y);
       sol_log_compute_units();

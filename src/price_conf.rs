@@ -474,8 +474,6 @@ mod test {
       assert_eq!(result, None);
     }
 
-    // TODO: test negative numbers
-
     succeeds(pc(1, 1, 0), pc(1, 1, 0), pc(1, 2, 0));
     succeeds(pc(1, 1, -8), pc(1, 1, -8), pc(1, 2, -16));
     succeeds(pc(10, 1, 0), pc(1, 1, 0), pc(10, 11, 0));
