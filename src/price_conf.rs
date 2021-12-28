@@ -81,6 +81,7 @@ impl PriceConf {
     let other_confidence_pct: u64 = (other.conf * PD_SCALE) / other_price;
 
     // first term is 57 bits, second term is 57 + 58 - 29 = 86 bits. Same exponent as the midprice.
+    // Note: the computation of the 2nd term consumes about 3k ops. We may want to optimize this.
     let conf = (((base.conf * PD_SCALE) / other_price) as u128) + ((other_confidence_pct as u128) * (midprice as u128)) / (PD_SCALE as u128);
 
     // Note that this check only fails if an argument's confidence interval was >> its price,
