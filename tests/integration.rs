@@ -27,39 +27,66 @@ async fn test_instr(instr: Instruction) {
     banks_client.process_transaction(transaction).await.unwrap();
 }
 
+fn pc(price: i64, conf: u64, expo: i32) -> PriceConf {
+    PriceConf {
+        price: price,
+        conf: conf,
+        expo: expo,
+    }
+}
+
 #[tokio::test]
 async fn test_noop() {
     test_instr(instruction::noop()).await;
 }
 
 #[tokio::test]
-async fn test_div() {
+async fn test_scale_to_exponent_down_worst_case() {
+    test_instr(instruction::scale_to_exponent(pc(1, u64::MAX, -1000), 1000)).await
+}
+
+#[tokio::test]
+async fn test_scale_to_exponent_up_worst_case() {
+    test_instr(instruction::scale_to_exponent(pc(1, u64::MAX, 1000), -1000)).await
+}
+
+#[tokio::test]
+async fn test_scale_to_exponent_best_case() {
+    test_instr(instruction::scale_to_exponent(pc(1, u64::MAX, 10), 10)).await
+}
+
+#[tokio::test]
+async fn test_normalize_conf_worst_case() {
+    test_instr(instruction::normalize(pc(1, u64::MAX, 0))).await
+}
+
+#[tokio::test]
+async fn test_normalize_price_worst_case() {
+    test_instr(instruction::normalize(pc(i64::MAX, 1, 0))).await
+}
+
+#[tokio::test]
+async fn test_normalize_price_worst_case2() {
+    test_instr(instruction::normalize(pc(i64::MIN, 1, 0))).await
+}
+
+#[tokio::test]
+async fn test_normalize_best_case() {
+    test_instr(instruction::normalize(pc(1, 1, 0))).await
+}
+
+#[tokio::test]
+async fn test_div_worst_case() {
     test_instr(instruction::divide(
-        PriceConf {
-            price: i64::MAX,
-            conf: 1,
-            expo: 0
-        },
-        PriceConf {
-            price: 1,
-            conf: 1,
-            expo: 0
-        }
+        pc(i64::MAX, 1, 0),
+        pc(1, 1, 0)
     )).await;
 }
 
 #[tokio::test]
-async fn test_mul() {
+async fn test_mul_worst_case() {
     test_instr(instruction::multiply(
-        PriceConf {
-            price: 100,
-            conf: 1,
-            expo: 2
-        },
-        PriceConf {
-            price: 123,
-            conf: 1,
-            expo: -2
-        }
+        pc(i64::MAX, 1, 2),
+        pc(123, 1, 2),
     )).await;
 }

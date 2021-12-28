@@ -188,7 +188,7 @@ impl PriceConf {
     if delta >= 0 {
       let mut p = self.price;
       let mut c = self.conf;
-      while delta > 0 {
+      while delta > 0 && (p != 0 || c != 0) {
         p /= 10;
         c /= 10;
         delta -= 1;
@@ -203,7 +203,7 @@ impl PriceConf {
       let mut p = Some(self.price);
       let mut c = Some(self.conf);
 
-      while delta < 0 {
+      while delta < 0 && p.is_some() && c.is_some() {
         p = p?.checked_mul(10);
         c = c?.checked_mul(10);
         delta += 1;

@@ -21,24 +21,48 @@ pub fn process_instruction(
   let instruction = PythClientInstruction::try_from_slice(input).unwrap();
   match instruction {
     PythClientInstruction::Divide { numerator, denominator } => {
-      msg!("Calculating numerator.div(denominator)");
-      sol_log_compute_units();
+      // msg!("Calculating numerator.div(denominator)");
+      // sol_log_compute_units();
       let result = numerator.div(&denominator);
-      sol_log_compute_units();
-      msg!("result: {:?}", result);
+      // sol_log_compute_units();
+      // msg!("result: {:?}", result);
       Ok(())
     }
     PythClientInstruction::Multiply { x, y } => {
-      msg!("Calculating numerator.mul(denominator)");
-      sol_log_compute_units();
+      // msg!("Calculating numerator.mul(denominator)");
+      // sol_log_compute_units();
       let result = x.mul(&y);
-      sol_log_compute_units();
-      msg!("result: {:?}", result);
+      // sol_log_compute_units();
+      // msg!("result: {:?}", result);
+      Ok(())
+    }
+    PythClientInstruction::Add { x, y } => {
+      // msg!("Calculating numerator.mul(denominator)");
+      // sol_log_compute_units();
+      let result = x.add(&y);
+      // sol_log_compute_units();
+      // msg!("result: {:?}", result);
+      Ok(())
+    }
+    PythClientInstruction::Normalize { x } => {
+      // msg!("Calculating numerator.mul(denominator)");
+      // sol_log_compute_units();
+      let result = x.normalize();
+      // sol_log_compute_units();
+      // msg!("result: {:?}", result);
+      Ok(())
+    }
+    PythClientInstruction::ScaleToExponent { x, expo } => {
+      // msg!("Calculating numerator.mul(denominator)");
+      // sol_log_compute_units();
+      let result = x.scale_to_exponent(expo);
+      // sol_log_compute_units();
+      // msg!("result: {:?}", result);
       Ok(())
     }
     PythClientInstruction::Noop => {
-      msg!("Do nothing");
-      msg!("{}", 0_u64);
+      // msg!("Do nothing");
+      // msg!("{}", 0_u64);
       Ok(())
     }
   }
