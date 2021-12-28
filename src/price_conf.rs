@@ -6,8 +6,6 @@ use {
 const PD_EXPO: i32 = -9;
 const PD_SCALE: u64 = 1_000_000_000;
 const MAX_PD_V_U64: u64 = (1 << 28) - 1;
-const MAX_PD_V_I64: i64 = MAX_PD_V_U64 as i64;
-const MIN_PD_V_I64: i64 = -MAX_PD_V_I64;
 
 /**
  * A price with a degree of uncertainty, represented as a price +- a confidence interval.
@@ -190,6 +188,7 @@ impl PriceConf {
     if delta >= 0 {
       let mut p = self.price;
       let mut c = self.conf;
+      // 2nd term is a short-circuit to bound op consumption
       while delta > 0 && (p != 0 || c != 0) {
         p /= 10;
         c /= 10;
@@ -205,6 +204,7 @@ impl PriceConf {
       let mut p = Some(self.price);
       let mut c = Some(self.conf);
 
+      // 2nd & 3rd terms are a short-circuit to bound op consumption
       while delta < 0 && p.is_some() && c.is_some() {
         p = p?.checked_mul(10);
         c = c?.checked_mul(10);
@@ -241,7 +241,10 @@ impl PriceConf {
 
 #[cfg(test)]
 mod test {
-  use crate::price_conf::{MAX_PD_V_U64, MAX_PD_V_I64, MIN_PD_V_I64, PD_EXPO, PD_SCALE, PriceConf};
+  use crate::price_conf::{MAX_PD_V_U64, PD_EXPO, PD_SCALE, PriceConf};
+
+  const MAX_PD_V_I64: i64 = MAX_PD_V_U64 as i64;
+  const MIN_PD_V_I64: i64 = -MAX_PD_V_I64;
 
   fn pc(price: i64, conf: u64, expo: i32) -> PriceConf {
     PriceConf {
