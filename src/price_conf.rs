@@ -155,18 +155,19 @@ impl PriceConf {
    * have been normalized to be between `MIN_PD_V_I64` and `MAX_PD_V_I64`.
    */
   pub fn normalize(&self) -> Option<PriceConf> {
-    let mut p = self.price;
+    // signed division is very expensive in op count
+    let (mut p, s) = PriceConf::to_unsigned(self.price);
     let mut c = self.conf;
     let mut e = self.expo;
 
-    while p > MAX_PD_V_I64 || p < MIN_PD_V_I64 || c > MAX_PD_V_U64 {
+    while p > MAX_PD_V_U64 || c > MAX_PD_V_U64 {
       p = p / 10;
       c = c / 10;
       e = e.checked_add(1)?;
     }
 
     Some(PriceConf {
-      price: p,
+      price: (p as i64) * s,
       conf: c,
       expo: e,
     })
@@ -226,11 +227,10 @@ impl PriceConf {
    * some of the computations above.
    */
   fn to_unsigned(x: i64) -> (u64, i64) {
-    // this check is stricter than necessary. it technically only needs to guard against
-    // i64::MIN, which can't be negated. However, this method should only be used in the context
-    // of normalized numbers.
-    assert!(x <= MAX_PD_V_I64 && x >= MIN_PD_V_I64);
-    if x < 0 {
+    if x == i64::MIN {
+      // special case because i64::MIN == -i64::MIN
+      (i64::MAX as u64 + 1, -1)
+    } else if x < 0 {
       (-x as u64, -1)
     } else {
       (x as u64, 1)
