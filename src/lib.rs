@@ -1,3 +1,12 @@
+pub use self::price_conf::PriceConf;
+
+mod entrypoint;
+pub mod processor;
+pub mod instruction;
+
+mod price_conf;
+solana_program::declare_id!("PythC11111111111111111111111111111111111111");
+
 pub const MAGIC          : u32   = 0xa1b2c3d4;
 pub const VERSION_2      : u32   = 2;
 pub const VERSION        : u32   = VERSION_2;
@@ -134,34 +143,68 @@ pub struct Price
 impl Price {
   /**
    * Get the current price and confidence interval as fixed-point numbers of the form a * 10^e.
-   * Returns a triple of the current price, confidence interval, and the exponent for both
-   * numbers. For example:
-   *
-   * get_current_price() -> Some((12345, 267, -2)) // represents 123.45 +- 2.67
-   * get_current_price() -> Some((123, 1, 2)) // represents 12300 +- 100
-   *
-   * Returns None if price information is currently unavailable.
+   * Returns a struct containing the current price, confidence interval, and the exponent for both
+   * numbers. Returns None if price information is currently unavailable.
    */
-  pub fn get_current_price(&self) -> Option<(i64, u64, i32)> {
+  pub fn get_current_price(&self) -> Option<PriceConf> {
     if !matches!(self.agg.status, PriceStatus::Trading) {
       None
     } else {
-      Some((self.agg.price, self.agg.conf, self.expo))
+      Some(PriceConf {
+        price: self.agg.price,
+        conf: self.agg.conf,
+        expo: self.expo
+      })
     }
   }
 
   /**
-   * Get the time-weighted average price (TWAP) as a fixed point number of the form a * 10^e.
-   * Returns a tuple of the current twap and its exponent. For example:
-   *
-   * get_twap() -> Some((123, -2)) // represents 1.23
-   * get_twap() -> Some((45, 3)) // represents 45000
-   *
+   * Get the time-weighted average price (TWAP) and a confidence interval on the result.
    * Returns None if the twap is currently unavailable.
+   *
+   * At the moment, the confidence interval returned by this method is computed in
+   * a somewhat questionable way, so we do not recommend using it for high-value applications.
    */
-  pub fn get_twap(&self) -> Option<(i64, i32)> {
+  pub fn get_twap(&self) -> Option<PriceConf> {
     // This method currently cannot return None, but may do so in the future.
-    Some((self.twap.val, self.expo))
+    // Note that the twac is a positive number in i64, so safe to cast to u64.
+    Some(PriceConf { price: self.twap.val, conf: self.twac.val as u64, expo: self.expo })
+  }
+
+  /**
+   * Get the current price of this account in a different quote currency. If this account
+   * represents the price of the product X/Z, and `quote` represents the price of the product Y/Z,
+   * this method returns the price of X/Y. Use this method to get the price of e.g., mSOL/SOL from
+   * the mSOL/USD and SOL/USD accounts.
+   *
+   * `result_expo` determines the exponent of the result, i.e., the number of digits below the decimal
+   * point. This method returns `None` if either the price or confidence are too large to be
+   * represented with the requested exponent.
+   */
+  pub fn get_price_in_quote(&self, quote: &Price, result_expo: i32) -> Option<PriceConf> {
+    return match (self.get_current_price(), quote.get_current_price()) {
+      (Some(base_price_conf), Some(quote_price_conf)) =>
+        base_price_conf.div(&quote_price_conf)?.scale_to_exponent(result_expo),
+      (_, _) => None,
+    }
+  }
+
+  /**
+   * Get the price of a basket of currencies. Each entry in `amounts` is of the form
+   * `(price, qty, qty_expo)`, and the result is the sum of `price * qty * 10^qty_expo`.
+   * The result is returned with exponent `result_expo`.
+   *
+   * An example use case for this function is to get the value of an LP token.
+   */
+  pub fn price_basket(amounts: &[(Price, i64, i32)], result_expo: i32) -> Option<PriceConf> {
+    assert!(amounts.len() > 0);
+    let mut res = PriceConf { price: 0, conf: 0, expo: result_expo };
+    for i in 0..amounts.len() {
+      res = res.add(
+        &amounts[i].0.get_current_price()?.cmul(amounts[i].1, amounts[i].2)?.scale_to_exponent(result_expo)?
+      )?
+    }
+    Some(res)
   }
 }
 
