@@ -11,8 +11,8 @@ env:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
+    container: solanalabs/rust:latest
 
     steps:
     - uses: actions/checkout@v2
