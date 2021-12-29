@@ -12,11 +12,10 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container: solanalabs/rust:latest
 
     steps:
     - uses: actions/checkout@v2
     - name: Build
-      run: cargo build-bpf --verbose
+      run: cargo build --verbose
     - name: Run tests
-      run: cargo test-bpf --verbose
+      run: cargo test --verbose
