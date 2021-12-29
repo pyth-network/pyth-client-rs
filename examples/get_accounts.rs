@@ -2,16 +2,12 @@
 // bootstrap all product and pricing accounts from root mapping account
 
 use pyth_client::{
-  AccountType,
-  Mapping,
-  Product,
-  Price,
   PriceType,
   PriceStatus,
   CorpAction,
-  cast,
-  MAGIC,
-  VERSION_2,
+  load_mapping,
+  load_product,
+  load_price,
   PROD_HDR_SIZE
 };
 use solana_client::{
@@ -71,24 +67,14 @@ fn main() {
   loop {
     // get Mapping account from key
     let map_data = clnt.get_account_data( &akey ).unwrap();
-    let map_acct = cast::<Mapping>( &map_data );
-    assert_eq!( map_acct.magic, MAGIC, "not a valid pyth account" );
-    assert_eq!( map_acct.atype, AccountType::Mapping as u32,
-                "not a valid pyth mapping account" );
-    assert_eq!( map_acct.ver, VERSION_2,
-                "unexpected pyth mapping account version" );
+    let map_acct = load_mapping( &map_data ).unwrap();
 
     // iget and print each Product in Mapping directory
     let mut i = 0;
     for prod_akey in &map_acct.products {
       let prod_pkey = Pubkey::new( &prod_akey.val );
       let prod_data = clnt.get_account_data( &prod_pkey ).unwrap();
-      let prod_acct = cast::<Product>( &prod_data );
-      assert_eq!( prod_acct.magic, MAGIC, "not a valid pyth account" );
-      assert_eq!( prod_acct.atype, AccountType::Product as u32,
-                  "not a valid pyth product account" );
-      assert_eq!( prod_acct.ver, VERSION_2,
-                  "unexpected pyth product account version" );
+      let prod_acct = load_product( &prod_data ).unwrap();
 
       // print key and reference data for this Product
       println!( "product_account .. {:?}", prod_pkey );
@@ -106,13 +92,8 @@ fn main() {
         let mut px_pkey = Pubkey::new( &prod_acct.px_acc.val );
         loop {
           let pd = clnt.get_account_data( &px_pkey ).unwrap();
-          let pa = cast::<Price>( &pd );
+          let pa = load_price( &pd ).unwrap();
 
-          assert_eq!( pa.magic, MAGIC, "not a valid pyth account" );
-          assert_eq!( pa.atype, AccountType::Price as u32,
-                     "not a valid pyth price account" );
-          assert_eq!( pa.ver, VERSION_2,
-                      "unexpected pyth price account version" );
           println!( "  price_account .. {:?}", px_pkey );
 
           let maybe_price = pa.get_current_price();

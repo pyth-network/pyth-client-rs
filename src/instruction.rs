@@ -1,4 +1,4 @@
-//! Program instructions, used for end-to-end testing and instruction counts
+//! Program instructions for end-to-end testing and instruction counts
 
 use {
   crate::id,
