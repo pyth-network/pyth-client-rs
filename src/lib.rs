@@ -1,9 +1,10 @@
 pub use self::price_conf::PriceConf;
+pub use self::error::PythError;
 
 mod entrypoint;
 pub mod processor;
 pub mod instruction;
-
+mod error;
 mod price_conf;
 solana_program::declare_id!("PythC11111111111111111111111111111111111111");
 
@@ -213,6 +214,7 @@ struct AccKeyU64
   pub val: [u64;4]
 }
 
+// FIXME: this should fail gracefully
 pub fn cast<T>( d: &[u8] ) -> &T {
   let (_, pxa, _) = unsafe { d.align_to::<T>() };
   &pxa[0]
@@ -224,4 +226,54 @@ impl AccKey
     let k8 = cast::<AccKeyU64>( &self.val );
     return k8.val[0]!=0 || k8.val[1]!=0 || k8.val[2]!=0 || k8.val[3]!=0;
   }
+}
+
+pub fn load_mapping(data: &[u8]) -> Result<&Mapping, PythError> {
+  // let pyth_product = cast::<Product>(&data).map_err(|_| PythError::InvalidAccountData)?;
+  let pyth_mapping = cast::<Mapping>(&data);
+
+  if pyth_mapping.magic != MAGIC {
+    return Err(PythError::InvalidAccountData);
+  }
+  if pyth_mapping.ver != VERSION_2 {
+    return Err(PythError::BadVersionNumber);
+  }
+  if pyth_mapping.atype != AccountType::Mapping as u32 {
+    return Err(PythError::WrongAccountType);
+  }
+
+  return Ok(pyth_mapping);
+}
+
+pub fn load_product(data: &[u8]) -> Result<&Product, PythError> {
+  // let pyth_product = cast::<Product>(&data).map_err(|_| PythError::InvalidAccountData)?;
+  let pyth_product = cast::<Product>(&data);
+
+  if pyth_product.magic != MAGIC {
+    return Err(PythError::InvalidAccountData);
+  }
+  if pyth_product.ver != VERSION_2 {
+    return Err(PythError::BadVersionNumber);
+  }
+  if pyth_product.atype != AccountType::Product as u32 {
+    return Err(PythError::WrongAccountType);
+  }
+
+  return Ok(pyth_product);
+}
+
+pub fn load_price(data: &[u8]) -> Result<&Price, PythError> {
+  let pyth_price = cast::<Price>(&data);
+
+  if pyth_price.magic != MAGIC {
+    return Err(PythError::InvalidAccountData);
+  }
+  if pyth_price.ver != VERSION_2 {
+    return Err(PythError::BadVersionNumber);
+  }
+  if pyth_price.atype != AccountType::Price as u32 {
+    return Err(PythError::WrongAccountType);
+  }
+
+  return Ok(pyth_price);
 }

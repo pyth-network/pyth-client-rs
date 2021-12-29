@@ -1,4 +1,4 @@
-//! Program instruction processor
+//! Program instruction processor for end-to-end testing and instruction counts
 
 use borsh::BorshDeserialize;
 use solana_program::{
