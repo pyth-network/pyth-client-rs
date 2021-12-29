@@ -19,6 +19,17 @@ pub enum PythClientInstruction {
     x: PriceConf,
     y: PriceConf,
   },
+  Add {
+    x: PriceConf,
+    y: PriceConf,
+  },
+  ScaleToExponent {
+    x: PriceConf,
+    expo: i32,
+  },
+  Normalize {
+    x: PriceConf,
+  },
   /// Don't do anything for comparison
   ///
   /// No accounts required for this instruction
@@ -40,6 +51,36 @@ pub fn multiply(x: PriceConf, y: PriceConf) -> Instruction {
     program_id: id(),
     accounts: vec![],
     data: PythClientInstruction::Multiply { x, y }
+      .try_to_vec()
+      .unwrap(),
+  }
+}
+
+pub fn add(x: PriceConf, y: PriceConf) -> Instruction {
+  Instruction {
+    program_id: id(),
+    accounts: vec![],
+    data: PythClientInstruction::Add { x, y }
+      .try_to_vec()
+      .unwrap(),
+  }
+}
+
+pub fn scale_to_exponent(x: PriceConf, expo: i32) -> Instruction {
+  Instruction {
+    program_id: id(),
+    accounts: vec![],
+    data: PythClientInstruction::ScaleToExponent { x, expo }
+      .try_to_vec()
+      .unwrap(),
+  }
+}
+
+pub fn normalize(x: PriceConf) -> Instruction {
+  Instruction {
+    program_id: id(),
+    accounts: vec![],
+    data: PythClientInstruction::Normalize { x }
       .try_to_vec()
       .unwrap(),
   }

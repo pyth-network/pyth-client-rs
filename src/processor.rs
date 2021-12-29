@@ -4,8 +4,6 @@ use borsh::BorshDeserialize;
 use solana_program::{
   account_info::AccountInfo,
   entrypoint::ProgramResult,
-  log::sol_log_compute_units,
-  msg,
   pubkey::Pubkey,
 };
 
@@ -21,24 +19,26 @@ pub fn process_instruction(
   let instruction = PythClientInstruction::try_from_slice(input).unwrap();
   match instruction {
     PythClientInstruction::Divide { numerator, denominator } => {
-      msg!("Calculating numerator.div(denominator)");
-      sol_log_compute_units();
-      let result = numerator.div(&denominator);
-      sol_log_compute_units();
-      msg!("result: {:?}", result);
+      numerator.div(&denominator);
       Ok(())
     }
     PythClientInstruction::Multiply { x, y } => {
-      msg!("Calculating numerator.mul(denominator)");
-      sol_log_compute_units();
-      let result = x.mul(&y);
-      sol_log_compute_units();
-      msg!("result: {:?}", result);
+      x.mul(&y);
+      Ok(())
+    }
+    PythClientInstruction::Add { x, y } => {
+      x.add(&y);
+      Ok(())
+    }
+    PythClientInstruction::Normalize { x } => {
+      x.normalize();
+      Ok(())
+    }
+    PythClientInstruction::ScaleToExponent { x, expo } => {
+      x.scale_to_exponent(expo);
       Ok(())
     }
     PythClientInstruction::Noop => {
-      msg!("Do nothing");
-      msg!("{}", 0_u64);
       Ok(())
     }
   }

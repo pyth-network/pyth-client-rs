@@ -1,11 +1,40 @@
+//! A Rust library for consuming price feeds from the [pyth.network](https://pyth.network/) oracle on the Solana network.
+//!
+//! # Quick Start
+//!
+//! Get the price from a Pyth price account:
+//!
+//! ```no_run
+//! use pyth_client::{load_price, PriceConf};
+//! // solana account data as bytes, either passed to on-chain program or from RPC connection.
+//! let account_data: Vec<u8> = vec![];
+//! let price_account = load_price( &account_data ).unwrap();
+//! // May be None if price is not currently available.
+//! let price: PriceConf = price_account.get_current_price().unwrap();
+//! println!("price: {} +- {} x 10^{}", price.price, price.conf, price.expo);
+//! ```
+//!
+//!
+//!
+//!
+
+
 pub use self::price_conf::PriceConf;
 pub use self::error::PythError;
 
 mod entrypoint;
-pub mod processor;
-pub mod instruction;
 mod error;
 mod price_conf;
+
+pub mod processor;
+pub mod instruction;
+
+use std::mem::size_of;
+use bytemuck::{
+  cast_slice, from_bytes, try_cast_slice,
+  Pod, PodCastError, Zeroable,
+};
+
 solana_program::declare_id!("PythC11111111111111111111111111111111111111");
 
 pub const MAGIC          : u32   = 0xa1b2c3d4;
@@ -17,6 +46,7 @@ pub const PROD_HDR_SIZE  : usize = 48;
 pub const PROD_ATTR_SIZE : usize = PROD_ACCT_SIZE - PROD_HDR_SIZE;
 
 // each account has its own type
+#[derive(Copy, Clone)]
 #[repr(C)]
 pub enum AccountType
 {
@@ -28,6 +58,7 @@ pub enum AccountType
 
 // aggregate and contributing prices are associated with a status
 // only Trading status is valid
+#[derive(Copy, Clone, PartialEq)]
 #[repr(C)]
 pub enum PriceStatus
 {
@@ -38,6 +69,7 @@ pub enum PriceStatus
 }
 
 // ongoing coporate action event - still undergoing dev
+#[derive(Copy, Clone, PartialEq)]
 #[repr(C)]
 pub enum CorpAction
 {
@@ -45,6 +77,7 @@ pub enum CorpAction
 }
 
 // different types of prices associated with a product
+#[derive(Copy, Clone, PartialEq)]
 #[repr(C)]
 pub enum PriceType
 {
@@ -53,6 +86,7 @@ pub enum PriceType
 }
 
 // solana public key
+#[derive(Copy, Clone)]
 #[repr(C)]
 pub struct AccKey
 {
@@ -60,6 +94,7 @@ pub struct AccKey
 }
 
 // Mapping account structure
+#[derive(Copy, Clone)]
 #[repr(C)]
 pub struct Mapping
 {
@@ -73,7 +108,15 @@ pub struct Mapping
   pub products   : [AccKey;MAP_TABLE_SIZE]
 }
 
+#[cfg(target_endian = "little")]
+unsafe impl Zeroable for Mapping {}
+
+#[cfg(target_endian = "little")]
+unsafe impl Pod for Mapping {}
+
+
 // Product account structure
+#[derive(Copy, Clone)]
 #[repr(C)]
 pub struct Product
 {
@@ -85,7 +128,14 @@ pub struct Product
   pub attr       : [u8;PROD_ATTR_SIZE] // key/value pairs of reference attr.
 }
 
+#[cfg(target_endian = "little")]
+unsafe impl Zeroable for Product {}
+
+#[cfg(target_endian = "little")]
+unsafe impl Pod for Product {}
+
 // contributing or aggregate price component
+#[derive(Copy, Clone)]
 #[repr(C)]
 pub struct PriceInfo
 {
@@ -97,6 +147,7 @@ pub struct PriceInfo
 }
 
 // latest component price and price used in aggregate snapshot
+#[derive(Copy, Clone)]
 #[repr(C)]
 pub struct PriceComp
 {
@@ -105,6 +156,7 @@ pub struct PriceComp
   pub latest     : PriceInfo   // latest contributing price (not in agg.)
 }
 
+#[derive(Copy, Clone)]
 #[repr(C)]
 pub struct Ema
 {
@@ -114,6 +166,7 @@ pub struct Ema
 }
 
 // Price account structure
+#[derive(Copy, Clone)]
 #[repr(C)]
 pub struct Price
 {
@@ -140,6 +193,12 @@ pub struct Price
   pub agg        : PriceInfo,  // aggregate price info
   pub comp       : [PriceComp;32] // price components one per quoter
 }
+
+#[cfg(target_endian = "little")]
+unsafe impl Zeroable for Price {}
+
+#[cfg(target_endian = "little")]
+unsafe impl Pod for Price {}
 
 impl Price {
   /**
@@ -209,28 +268,41 @@ impl Price {
   }
 }
 
+#[derive(Copy, Clone)]
 struct AccKeyU64
 {
   pub val: [u64;4]
 }
 
-// FIXME: this should fail gracefully
-pub fn cast<T>( d: &[u8] ) -> &T {
-  let (_, pxa, _) = unsafe { d.align_to::<T>() };
-  &pxa[0]
-}
+#[cfg(target_endian = "little")]
+unsafe impl Zeroable for AccKeyU64 {}
+
+#[cfg(target_endian = "little")]
+unsafe impl Pod for AccKeyU64 {}
 
 impl AccKey
 {
   pub fn is_valid( &self ) -> bool  {
-    let k8 = cast::<AccKeyU64>( &self.val );
-    return k8.val[0]!=0 || k8.val[1]!=0 || k8.val[2]!=0 || k8.val[3]!=0;
+    match load::<AccKeyU64>( &self.val ) {
+      Ok(k8) => k8.val[0]!=0 || k8.val[1]!=0 || k8.val[2]!=0 || k8.val[3]!=0,
+      Err(_) => false,
+    }
+  }
+}
+
+fn load<T: Pod>(data: &[u8]) -> Result<&T, PodCastError> {
+  let size = size_of::<T>();
+  if data.len() >= size {
+    Ok(from_bytes(cast_slice::<u8, u8>(try_cast_slice(
+      &data[0..size],
+    )?)))
+  } else {
+    Err(PodCastError::SizeMismatch)
   }
 }
 
 pub fn load_mapping(data: &[u8]) -> Result<&Mapping, PythError> {
-  // let pyth_product = cast::<Product>(&data).map_err(|_| PythError::InvalidAccountData)?;
-  let pyth_mapping = cast::<Mapping>(&data);
+  let pyth_mapping = load::<Mapping>(&data).map_err(|_| PythError::InvalidAccountData)?;
 
   if pyth_mapping.magic != MAGIC {
     return Err(PythError::InvalidAccountData);
@@ -246,8 +318,7 @@ pub fn load_mapping(data: &[u8]) -> Result<&Mapping, PythError> {
 }
 
 pub fn load_product(data: &[u8]) -> Result<&Product, PythError> {
-  // let pyth_product = cast::<Product>(&data).map_err(|_| PythError::InvalidAccountData)?;
-  let pyth_product = cast::<Product>(&data);
+  let pyth_product = load::<Product>(&data).map_err(|_| PythError::InvalidAccountData)?;
 
   if pyth_product.magic != MAGIC {
     return Err(PythError::InvalidAccountData);
@@ -263,7 +334,7 @@ pub fn load_product(data: &[u8]) -> Result<&Product, PythError> {
 }
 
 pub fn load_price(data: &[u8]) -> Result<&Price, PythError> {
-  let pyth_price = cast::<Price>(&data);
+  let pyth_price = load::<Price>(&data).map_err(|_| PythError::InvalidAccountData)?;
 
   if pyth_price.magic != MAGIC {
     return Err(PythError::InvalidAccountData);

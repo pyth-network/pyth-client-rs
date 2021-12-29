@@ -3,7 +3,7 @@
 A Rust library for consuming price feeds from the [pyth.network](https://pyth.network/) oracle on the Solana network.
 This package includes a library for on-chain programs and an example program for printing product reference data.
 
-Key features of this crate include:
+Key features of this library include:
 
 * Get the current price of over [50 products](https://pyth.network/markets/), including cryptocurrencies,
   US equities, forex and more.
@@ -57,10 +57,17 @@ product_account .. 6MEwdxe4g1NeAF9u6KDG14anJpFsVEa2cvr5H6iriFZ8
     twac ......... 2259870
 ```
 
-### Development
+## Development
 
+This library can be built for either your native platform or in BPF (used by Solana programs). 
+Use `cargo build` / `cargo test` to build and test natively.
+Use `cargo build-bpf` / `cargo test-bpf` to build in BPF for Solana; these commands require you to have installed the [Solana CLI tools](https://docs.solana.com/cli/install-solana-cli-tools). 
 
-### Releasing
+The BPF tests will also run an instruction count program that logs the resource consumption
+of various library functions.
+This program can also be run on its own using `cargo test-bpf --test instruction_count`.
+
+### Releases
 
 To release a new version of this package, perform the following steps:
 
