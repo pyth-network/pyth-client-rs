@@ -1,5 +1,8 @@
 //! A Rust library for consuming price feeds from the [pyth.network](https://pyth.network/) oracle on the Solana network.
 //!
+//! In order to use this library, you likely need to understand how Pyth's price feeds are stored in Solana accounts.
+//! Please see [this document](https://docs.pyth.network/how-pyth-works/account-structure) for more information.
+//!
 //! # Quick Start
 //!
 //! Get the price from a Pyth price account:
@@ -11,13 +14,8 @@
 //! let price_account = load_price( &account_data ).unwrap();
 //! // May be None if price is not currently available.
 //! let price: PriceConf = price_account.get_current_price().unwrap();
-//! println!("price: {} +- {} x 10^{}", price.price, price.conf, price.expo);
+//! println!("price: ({} +- {}) x 10^{}", price.price, price.conf, price.expo);
 //! ```
-//!
-//!
-//!
-//!
-
 
 pub use self::price_conf::PriceConf;
 pub use self::error::PythError;
@@ -45,7 +43,7 @@ pub const PROD_ACCT_SIZE : usize = 512;
 pub const PROD_HDR_SIZE  : usize = 48;
 pub const PROD_ATTR_SIZE : usize = PROD_ACCT_SIZE - PROD_HDR_SIZE;
 
-// each account has its own type
+/// The type of Pyth account determines what data it contains
 #[derive(Copy, Clone)]
 #[repr(C)]
 pub enum AccountType
@@ -56,19 +54,23 @@ pub enum AccountType
   Price
 }
 
-// aggregate and contributing prices are associated with a status
-// only Trading status is valid
+/// The current status of a price feed.
 #[derive(Copy, Clone, PartialEq)]
 #[repr(C)]
 pub enum PriceStatus
 {
+  /// The price feed is not currently updating for an unknown reason.
   Unknown,
+  /// The price feed is updating as expected.
   Trading,
+  /// The price feed is not currently updating because trading in the product has been halted.
   Halted,
+  /// The price feed is not currently updating because an auction is setting the price.
   Auction
 }
 
-// ongoing coporate action event - still undergoing dev
+/// Status of any ongoing corporate actions.
+/// (still undergoing dev)
 #[derive(Copy, Clone, PartialEq)]
 #[repr(C)]
 pub enum CorpAction
@@ -76,7 +78,7 @@ pub enum CorpAction
   NoCorpAct
 }
 
-// different types of prices associated with a product
+/// The type of prices associated with a product -- each product may have multiple price feeds of different types.
 #[derive(Copy, Clone, PartialEq)]
 #[repr(C)]
 pub enum PriceType
@@ -85,7 +87,7 @@ pub enum PriceType
   Price
 }
 
-// solana public key
+/// Public key of a Solana account
 #[derive(Copy, Clone)]
 #[repr(C)]
 pub struct AccKey
@@ -93,18 +95,24 @@ pub struct AccKey
   pub val: [u8;32]
 }
 
-// Mapping account structure
+/// Mapping accounts form a linked-list containing the listing of all products on Pyth.
 #[derive(Copy, Clone)]
 #[repr(C)]
 pub struct Mapping
 {
-  pub magic      : u32,        // pyth magic number
-  pub ver        : u32,        // program version
-  pub atype      : u32,        // account type
-  pub size       : u32,        // account used size
-  pub num        : u32,        // number of product accounts
+  /// pyth magic number
+  pub magic      : u32,
+  /// program version
+  pub ver        : u32,
+  /// account type
+  pub atype      : u32,
+  /// account used size
+  pub size       : u32,
+  /// number of product accounts
+  pub num        : u32,
   pub unused     : u32,
-  pub next       : AccKey,     // next mapping account (if any)
+  /// next mapping account (if any)
+  pub next       : AccKey,
   pub products   : [AccKey;MAP_TABLE_SIZE]
 }
 
@@ -115,17 +123,24 @@ unsafe impl Zeroable for Mapping {}
 unsafe impl Pod for Mapping {}
 
 
-// Product account structure
+/// Product accounts contain metadata for a single product, such as its symbol ("Crypto.BTC/USD")
+/// and its base/quote currencies.
 #[derive(Copy, Clone)]
 #[repr(C)]
 pub struct Product
 {
-  pub magic      : u32,        // pyth magic number
-  pub ver        : u32,        // program version
-  pub atype      : u32,        // account type
-  pub size       : u32,        // price account size
-  pub px_acc     : AccKey,     // first price account in list
-  pub attr       : [u8;PROD_ATTR_SIZE] // key/value pairs of reference attr.
+  /// pyth magic number
+  pub magic      : u32,
+  /// program version
+  pub ver        : u32,
+  /// account type
+  pub atype      : u32,
+  /// price account size
+  pub size       : u32,
+  /// first price account in list
+  pub px_acc     : AccKey,
+  /// key/value pairs of reference attr.
+  pub attr       : [u8;PROD_ATTR_SIZE]
 }
 
 #[cfg(target_endian = "little")]
@@ -134,64 +149,100 @@ unsafe impl Zeroable for Product {}
 #[cfg(target_endian = "little")]
 unsafe impl Pod for Product {}
 
-// contributing or aggregate price component
+/// A price and confidence at a specific slot. This struct can represent either a
+/// publisher's contribution or the outcome of price aggregation.
 #[derive(Copy, Clone)]
 #[repr(C)]
 pub struct PriceInfo
 {
-  pub price      : i64,        // product price
-  pub conf       : u64,        // confidence interval of product price
-  pub status     : PriceStatus,// status of price (Trading is valid)
-  pub corp_act   : CorpAction, // notification of any corporate action
+  /// the current price
+  pub price      : i64,
+  /// confidence interval around the price
+  pub conf       : u64,
+  /// status of price (Trading is valid)
+  pub status     : PriceStatus,
+  /// notification of any corporate action
+  pub corp_act   : CorpAction,
   pub pub_slot   : u64
 }
 
-// latest component price and price used in aggregate snapshot
+/// The price and confidence contributed by a specific publisher.
 #[derive(Copy, Clone)]
 #[repr(C)]
 pub struct PriceComp
 {
-  pub publisher  : AccKey,     // key of contributing quoter
-  pub agg        : PriceInfo,  // contributing price to last aggregate
-  pub latest     : PriceInfo   // latest contributing price (not in agg.)
+  /// key of contributing publisher
+  pub publisher  : AccKey,
+  /// the price used to compute the current aggregate price
+  pub agg        : PriceInfo,
+  /// The publisher's latest price. This price will be incorporated into the aggregate price
+  /// when price aggregation runs next.
+  pub latest     : PriceInfo
+
 }
 
+/// An exponentially-weighted moving average.
 #[derive(Copy, Clone)]
 #[repr(C)]
 pub struct Ema
 {
-  pub val        : i64,        // current value of ema
-  numer          : i64,        // numerator state for next update
-  denom          : i64         // denominator state for next update
+  /// The current value of the EMA
+  pub val        : i64,
+  /// numerator state for next update
+  numer          : i64,
+  /// denominator state for next update
+  denom          : i64
 }
 
-// Price account structure
+/// Price accounts represent a continuously-updating price feed for a product.
 #[derive(Copy, Clone)]
 #[repr(C)]
 pub struct Price
 {
-  pub magic      : u32,        // pyth magic number
-  pub ver        : u32,        // program version
-  pub atype      : u32,        // account type
-  pub size       : u32,        // price account size
-  pub ptype      : PriceType,  // price or calculation type
-  pub expo       : i32,        // price exponent
-  pub num        : u32,        // number of component prices
-  pub num_qt     : u32,        // number of quoters that make up aggregate
-  pub last_slot  : u64,        // slot of last valid (not unknown) aggregate price
-  pub valid_slot : u64,        // valid slot-time of agg. price
-  pub twap       : Ema,        // time-weighted average price
-  pub twac       : Ema,        // time-weighted average confidence interval
-  pub drv1       : i64,        // space for future derived values
-  pub drv2       : i64,        // space for future derived values
-  pub prod       : AccKey,     // product account key
-  pub next       : AccKey,     // next Price account in linked list
-  pub prev_slot  : u64,        // valid slot of previous update
-  pub prev_price : i64,        // aggregate price of previous update
-  pub prev_conf  : u64,        // confidence interval of previous update
-  pub drv3       : i64,        // space for future derived values
-  pub agg        : PriceInfo,  // aggregate price info
-  pub comp       : [PriceComp;32] // price components one per quoter
+  /// pyth magic number
+  pub magic      : u32,
+  /// program version
+  pub ver        : u32,
+  /// account type
+  pub atype      : u32,
+  /// price account size
+  pub size       : u32,
+  /// price or calculation type
+  pub ptype      : PriceType,
+  /// price exponent
+  pub expo       : i32,
+  /// number of component prices
+  pub num        : u32,
+  /// number of quoters that make up aggregate
+  pub num_qt     : u32,
+  /// slot of last valid (not unknown) aggregate price
+  pub last_slot  : u64,
+  /// valid slot-time of agg. price
+  pub valid_slot : u64,
+  /// time-weighted average price
+  pub twap       : Ema,
+  /// time-weighted average confidence interval
+  pub twac       : Ema,
+  /// space for future derived values
+  pub drv1       : i64,
+  /// space for future derived values
+  pub drv2       : i64,
+  /// product account key
+  pub prod       : AccKey,
+  /// next Price account in linked list
+  pub next       : AccKey,
+  /// valid slot of previous update
+  pub prev_slot  : u64,
+  /// aggregate price of previous update
+  pub prev_price : i64,
+  /// confidence interval of previous update
+  pub prev_conf  : u64,
+  /// space for future derived values
+  pub drv3       : i64,
+  /// aggregate price info
+  pub agg        : PriceInfo,
+  /// price components one per quoter
+  pub comp       : [PriceComp;32]
 }
 
 #[cfg(target_endian = "little")]
@@ -204,7 +255,7 @@ impl Price {
   /**
    * Get the current price and confidence interval as fixed-point numbers of the form a * 10^e.
    * Returns a struct containing the current price, confidence interval, and the exponent for both
-   * numbers. Returns None if price information is currently unavailable.
+   * numbers. Returns `None` if price information is currently unavailable for any reason.
    */
   pub fn get_current_price(&self) -> Option<PriceConf> {
     if !matches!(self.agg.status, PriceStatus::Trading) {
@@ -220,7 +271,7 @@ impl Price {
 
   /**
    * Get the time-weighted average price (TWAP) and a confidence interval on the result.
-   * Returns None if the twap is currently unavailable.
+   * Returns `None` if the twap is currently unavailable.
    *
    * At the moment, the confidence interval returned by this method is computed in
    * a somewhat questionable way, so we do not recommend using it for high-value applications.
@@ -301,6 +352,7 @@ fn load<T: Pod>(data: &[u8]) -> Result<&T, PodCastError> {
   }
 }
 
+/** Get a `Mapping` account from the raw byte value of a Solana account. */
 pub fn load_mapping(data: &[u8]) -> Result<&Mapping, PythError> {
   let pyth_mapping = load::<Mapping>(&data).map_err(|_| PythError::InvalidAccountData)?;
 
@@ -317,6 +369,7 @@ pub fn load_mapping(data: &[u8]) -> Result<&Mapping, PythError> {
   return Ok(pyth_mapping);
 }
 
+/** Get a `Product` account from the raw byte value of a Solana account. */
 pub fn load_product(data: &[u8]) -> Result<&Product, PythError> {
   let pyth_product = load::<Product>(&data).map_err(|_| PythError::InvalidAccountData)?;
 
@@ -333,6 +386,7 @@ pub fn load_product(data: &[u8]) -> Result<&Product, PythError> {
   return Ok(pyth_product);
 }
 
+/** Get a `Price` account from the raw byte value of a Solana account. */
 pub fn load_price(data: &[u8]) -> Result<&Price, PythError> {
   let pyth_price = load::<Price>(&data).map_err(|_| PythError::InvalidAccountData)?;
 
