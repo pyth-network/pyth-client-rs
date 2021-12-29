@@ -6,8 +6,6 @@ use {
 const PD_EXPO: i32 = -9;
 const PD_SCALE: u64 = 1_000_000_000;
 const MAX_PD_V_U64: u64 = (1 << 28) - 1;
-const MAX_PD_V_I64: i64 = MAX_PD_V_U64 as i64;
-const MIN_PD_V_I64: i64 = -MAX_PD_V_I64;
 
 /**
  * A price with a degree of uncertainty, represented as a price +- a confidence interval.
@@ -81,6 +79,7 @@ impl PriceConf {
     let other_confidence_pct: u64 = (other.conf * PD_SCALE) / other_price;
 
     // first term is 57 bits, second term is 57 + 58 - 29 = 86 bits. Same exponent as the midprice.
+    // Note: the computation of the 2nd term consumes about 3k ops. We may want to optimize this.
     let conf = (((base.conf * PD_SCALE) / other_price) as u128) + ((other_confidence_pct as u128) * (midprice as u128)) / (PD_SCALE as u128);
 
     // Note that this check only fails if an argument's confidence interval was >> its price,
@@ -155,18 +154,19 @@ impl PriceConf {
    * have been normalized to be between `MIN_PD_V_I64` and `MAX_PD_V_I64`.
    */
   pub fn normalize(&self) -> Option<PriceConf> {
-    let mut p = self.price;
+    // signed division is very expensive in op count
+    let (mut p, s) = PriceConf::to_unsigned(self.price);
     let mut c = self.conf;
     let mut e = self.expo;
 
-    while p > MAX_PD_V_I64 || p < MIN_PD_V_I64 || c > MAX_PD_V_U64 {
+    while p > MAX_PD_V_U64 || c > MAX_PD_V_U64 {
       p = p / 10;
       c = c / 10;
       e = e.checked_add(1)?;
     }
 
     Some(PriceConf {
-      price: p,
+      price: (p as i64) * s,
       conf: c,
       expo: e,
     })
@@ -188,7 +188,8 @@ impl PriceConf {
     if delta >= 0 {
       let mut p = self.price;
       let mut c = self.conf;
-      while delta > 0 {
+      // 2nd term is a short-circuit to bound op consumption
+      while delta > 0 && (p != 0 || c != 0) {
         p /= 10;
         c /= 10;
         delta -= 1;
@@ -203,7 +204,8 @@ impl PriceConf {
       let mut p = Some(self.price);
       let mut c = Some(self.conf);
 
-      while delta < 0 {
+      // 2nd & 3rd terms are a short-circuit to bound op consumption
+      while delta < 0 && p.is_some() && c.is_some() {
         p = p?.checked_mul(10);
         c = c?.checked_mul(10);
         delta += 1;
@@ -226,11 +228,10 @@ impl PriceConf {
    * some of the computations above.
    */
   fn to_unsigned(x: i64) -> (u64, i64) {
-    // this check is stricter than necessary. it technically only needs to guard against
-    // i64::MIN, which can't be negated. However, this method should only be used in the context
-    // of normalized numbers.
-    assert!(x <= MAX_PD_V_I64 && x >= MIN_PD_V_I64);
-    if x < 0 {
+    if x == i64::MIN {
+      // special case because i64::MIN == -i64::MIN
+      (i64::MAX as u64 + 1, -1)
+    } else if x < 0 {
       (-x as u64, -1)
     } else {
       (x as u64, 1)
@@ -240,7 +241,10 @@ impl PriceConf {
 
 #[cfg(test)]
 mod test {
-  use crate::price_conf::{MAX_PD_V_U64, MAX_PD_V_I64, MIN_PD_V_I64, PD_EXPO, PD_SCALE, PriceConf};
+  use crate::price_conf::{MAX_PD_V_U64, PD_EXPO, PD_SCALE, PriceConf};
+
+  const MAX_PD_V_I64: i64 = MAX_PD_V_U64 as i64;
+  const MIN_PD_V_I64: i64 = -MAX_PD_V_I64;
 
   fn pc(price: i64, conf: u64, expo: i32) -> PriceConf {
     PriceConf {

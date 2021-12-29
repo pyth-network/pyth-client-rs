@@ -2,7 +2,6 @@
 
 A rust API for describing on-chain pyth account structures.  A primer on pyth accounts can be found at https://github.com/pyth-network/pyth-client/blob/main/doc/aggregate_price.md
 
-
 Contains a library for use in on-chain program development and an off-chain example program for loading and printing product reference data and aggregate prices from all devnet pyth accounts.
 
 ### Running the Example
@@ -38,3 +37,10 @@ product_account .. 6MEwdxe4g1NeAF9u6KDG14anJpFsVEa2cvr5H6iriFZ8
     twap ......... 7426390900
     twac ......... 2259870
 ```
+
+
+### Development
+
+Run `cargo test-bpf` to build in BPF and run the unit tests.
+This command will also build an instruction count program that logs the resource consumption
+of various functions.
