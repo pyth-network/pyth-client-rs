@@ -6,14 +6,15 @@ use thiserror::Error;
 #[derive(Clone, Debug, Eq, Error, FromPrimitive, PartialEq)]
 pub enum PythError {
   // 0
-  /// Invalid instruction data passed in.
-  #[error("Failed to unpack instruction data")]
+  /// Invalid account data -- either insufficient data, or incorrect magic number
+  #[error("Failed to convert account into a Pyth account")]
   InvalidAccountData,
-  /// Invalid instruction data passed in.
-  #[error("Failed to unpack instruction data")]
+  /// Wrong version number
+  #[error("Incorrect version number for Pyth account")]
   BadVersionNumber,
-  /// Invalid instruction data passed in.
-  #[error("Failed to unpack instruction data")]
+  /// Tried reading an account with the wrong type, e.g., tried to read
+  /// a price account as a product account.
+  #[error("Incorrect account type")]
   WrongAccountType,
 }
 
