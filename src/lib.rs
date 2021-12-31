@@ -11,7 +11,6 @@ mod price_conf;
 
 pub mod processor;
 pub mod instruction;
-pub mod mock;
 
 use std::mem::size_of;
 use bytemuck::{
