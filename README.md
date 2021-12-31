@@ -1,7 +1,7 @@
 # Pyth Client
 
-A Rust library for consuming price feeds from the [pyth.network](https://pyth.network/) oracle on the Solana network.
-This package includes a library for on-chain programs and an example program for printing product reference data.
+This crate provides utilities for reading price feeds from the [pyth.network](https://pyth.network/) oracle on the Solana network.
+The crate includes a library for on-chain programs and an off-chain example program.
 
 Key features of this library include:
 
@@ -12,7 +12,7 @@ Key features of this library include:
 
 Please see the [pyth.network documentation](https://docs.pyth.network/) for more information about pyth.network.
 
-## Usage
+## Installation
 
 Add a dependency to your Cargo.toml:
 
@@ -23,7 +23,88 @@ pyth-client="<version>"
 
 See [pyth-client on crates.io](https://crates.io/crates/pyth-client/) to get the latest version of the library.
 
-### Running the Example
+## Usage
+
+Pyth Network stores its price feeds in a collection of Solana accounts.
+This crate provides utilities for interpreting and manipulating the content of these accounts.
+Applications can obtain the content of these accounts in two different ways:
+* On-chain programs should pass these accounts to the instructions that require price feeds.
+* Off-chain programs can access these accounts using the Solana RPC client (as in the [example program](examples/get_accounts.rs)).
+
+In both cases, the content of the account will be provided to the application as a binary blob (`Vec<u8>`).
+The examples below assume that the user has already obtained this account data.
+
+### Parse account data
+
+Pyth Network has several different types of accounts:
+* Price accounts store the current price for a product
+* Product accounts store metadata about a product, such as its symbol (e.g., "BTC/USD").
+* Mapping accounts store a listing of all Pyth accounts
+
+For more information on the different types of Pyth accounts, see the [account structure documentation](https://docs.pyth.network/how-pyth-works/account-structure).
+The pyth.network website also lists the public keys of the accounts (e.g., [BTC/USD accounts](https://pyth.network/markets/#BTC/USD)).  
+
+This library provides several `load_*` methods that translate the binary data in each account into an appropriate struct: 
+
+```rust
+// replace with account data, either passed to on-chain program or from RPC node 
+let price_account_data: Vec<u8> = ...;
+let price_account: Price = load_price( &price_account_data ).unwrap();
+
+let product_account_data: Vec<u8> = ...;
+let product_account: Product = load_product( &product_account_data ).unwrap();
+
+let mapping_account_data: Vec<u8> = ...;
+let mapping_account: Mapping = load_mapping( &mapping_account_data ).unwrap();
+```
+
+### Get the current price
+
+Read the current price from a `Price` account: 
+
+```rust
+let price: PriceConf = price_account.get_current_price().unwrap();
+println!("price: ({} +- {}) x 10^{}", price.price, price.conf, price.expo);
+```
+
+The price is returned along with a confidence interval that represents the degree of uncertainty in the price.
+Both values are represented as fixed-point numbers, `a * 10^e`. 
+The method will return `None` if the price is not currently available.
+
+### Non-USD prices 
+
+Most assets in Pyth are priced in USD.
+Applications can combine two USD prices to price an asset in a different quote currency:
+
+```rust
+let btc_usd: Price = ...;
+let eth_usd: Price = ...;
+// -8 is the desired exponent for the result 
+let btc_eth: PriceConf = btc_usd.get_price_in_quote(&eth_usd, -8);
+println!("BTC/ETH price: ({} +- {}) x 10^{}", price.price, price.conf, price.expo);
+```
+
+### Price a basket of assets
+
+Applications can also compute the value of a basket of multiple assets:
+
+```rust
+let btc_usd: Price = ...;
+let eth_usd: Price = ...;
+// Quantity of each asset in fixed-point a * 10^e.
+// This represents 0.1 BTC and .05 ETH.
+// -8 is desired exponent for result
+let basket_price: PriceConf = Price::price_basket(&[
+    (btc_usd, 10, -2),
+    (eth_usd, 5, -2)
+  ], -8);
+println!("0.1 BTC and 0.05 ETH are worth: ({} +- {}) x 10^{} USD",
+         basket_price.price, basket_price.conf, basket_price.expo);
+```
+
+This function additionally propagates any uncertainty in the price into uncertainty in the value of the basket.
+
+### Off-chain example program
 
 The example program prints the product reference data and current price information for Pyth on Solana devnet.
 Run the following commands to try this example program:

@@ -1,21 +1,6 @@
 //! A Rust library for consuming price feeds from the [pyth.network](https://pyth.network/) oracle on the Solana network.
 //!
-//! In order to use this library, you likely need to understand how Pyth's price feeds are stored in Solana accounts.
-//! Please see [this document](https://docs.pyth.network/how-pyth-works/account-structure) for more information.
-//!
-//! # Quick Start
-//!
-//! Get the price from a Pyth price account:
-//!
-//! ```no_run
-//! use pyth_client::{load_price, PriceConf};
-//! // solana account data as bytes, either passed to on-chain program or from RPC connection.
-//! let account_data: Vec<u8> = vec![];
-//! let price_account = load_price( &account_data ).unwrap();
-//! // May be None if price is not currently available.
-//! let price: PriceConf = price_account.get_current_price().unwrap();
-//! println!("price: ({} +- {}) x 10^{}", price.price, price.conf, price.expo);
-//! ```
+//! Please see the [crates.io page](https://crates.io/crates/pyth-client/) for documentation and example usage.
 
 pub use self::price_conf::PriceConf;
 pub use self::error::PythError;
@@ -26,6 +11,7 @@ mod price_conf;
 
 pub mod processor;
 pub mod instruction;
+pub mod mock;
 
 use std::mem::size_of;
 use bytemuck::{
