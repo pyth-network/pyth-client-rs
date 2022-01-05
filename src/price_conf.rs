@@ -62,7 +62,7 @@ impl PriceConf {
 
     // Compute the midprice, base in terms of other.
     // Uses at most 57 bits
-    let midprice = base_price * PD_SCALE / other_price;
+    let midprice = base_price.checked_mul(PD_SCALE)?.checked_div(other_price)?;
     let midprice_expo = base.expo.checked_sub(other.expo)?.checked_add(PD_EXPO)?;
 
     // Compute the confidence interval.
@@ -76,17 +76,18 @@ impl PriceConf {
     // shouldn't matter considering that confidence intervals are typically ~0.1% of the price.
 
     // This uses 57 bits and has an exponent of PD_EXPO.
-    let other_confidence_pct: u64 = (other.conf * PD_SCALE) / other_price;
+    let other_confidence_pct: u64 = other.conf.checked_mul(PD_SCALE)?.checked_div(other_price)?;
 
     // first term is 57 bits, second term is 57 + 58 - 29 = 86 bits. Same exponent as the midprice.
     // Note: the computation of the 2nd term consumes about 3k ops. We may want to optimize this.
-    let conf = (((base.conf * PD_SCALE) / other_price) as u128) + ((other_confidence_pct as u128) * (midprice as u128)) / (PD_SCALE as u128);
+    let conf = (base.conf.checked_mul(PD_SCALE)?.checked_div(other_price)? as u128).checked_add(
+      (other_confidence_pct as u128).checked_mul(midprice as u128)?.checked_div(PD_SCALE as u128)?)?;
 
     // Note that this check only fails if an argument's confidence interval was >> its price,
     // in which case None is a reasonable result, as we have essentially 0 information about the price.
     if conf < (u64::MAX as u128) {
       Some(PriceConf {
-        price: (midprice as i64) * base_sign * other_sign,
+        price: (midprice as i64).checked_mul(base_sign)?.checked_mul(other_sign)?,
         conf: conf as u64,
         expo: midprice_expo,
       })
@@ -133,17 +134,17 @@ impl PriceConf {
     let (other_price, other_sign) = PriceConf::to_unsigned(other.price);
 
     // Uses at most 27*2 = 54 bits
-    let midprice = base_price * other_price;
+    let midprice = base_price.checked_mul(other_price)?;
     let midprice_expo = base.expo.checked_add(other.expo)?;
 
     // Compute the confidence interval.
     // This code uses the 1-norm instead of the 2-norm for computational reasons.
     // Note that this simplifies: pq * (a/p + b/q) = qa + pb
     // 27*2 + 1 bits
-    let conf = base.conf * other_price + other.conf * base_price;
+    let conf = base.conf.checked_mul(other_price)?.checked_add(other.conf.checked_mul(base_price)?)?;
 
     Some(PriceConf {
-      price: (midprice as i64) * base_sign * other_sign,
+      price: (midprice as i64).checked_mul(base_sign)?.checked_mul(other_sign)?,
       conf,
       expo: midprice_expo,
     })
@@ -160,13 +161,13 @@ impl PriceConf {
     let mut e = self.expo;
 
     while p > MAX_PD_V_U64 || c > MAX_PD_V_U64 {
-      p = p / 10;
-      c = c / 10;
+      p = p.checked_div(10)?;
+      c = c.checked_div(10)?;
       e = e.checked_add(1)?;
     }
 
     Some(PriceConf {
-      price: (p as i64) * s,
+      price: (p as i64).checked_mul(s)?,
       conf: c,
       expo: e,
     })
@@ -190,9 +191,9 @@ impl PriceConf {
       let mut c = self.conf;
       // 2nd term is a short-circuit to bound op consumption
       while delta > 0 && (p != 0 || c != 0) {
-        p /= 10;
-        c /= 10;
-        delta -= 1;
+        p = p.checked_div(10)?;
+        c = c.checked_div(10)?;
+        delta = delta.checked_sub(1)?;
       }
 
       Some(PriceConf {
@@ -201,25 +202,21 @@ impl PriceConf {
         expo: target_expo,
       })
     } else {
-      let mut p = Some(self.price);
-      let mut c = Some(self.conf);
+      let mut p = self.price;
+      let mut c = self.conf;
 
-      // 2nd & 3rd terms are a short-circuit to bound op consumption
-      while delta < 0 && p.is_some() && c.is_some() {
-        p = p?.checked_mul(10);
-        c = c?.checked_mul(10);
-        delta += 1;
+      // Either p or c == None will short-circuit to bound op consumption
+      while delta < 0 {
+        p = p.checked_mul(10)?;
+        c = c.checked_mul(10)?;
+        delta = delta.checked_add(1)?;
       }
 
-      match (p, c) {
-        (Some(price), Some(conf)) =>
-          Some(PriceConf {
-            price,
-            conf,
-            expo: target_expo,
-          }),
-        (_, _) => None,
-      }
+      Some(PriceConf {
+        price: p,
+        conf: c,
+        expo: target_expo,
+      })
     }
   }
 
