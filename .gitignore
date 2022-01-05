@@ -2,3 +2,7 @@
 debug
 target
 Cargo.lock
+
+# IntelliJ temp files
+.idea
+*.iml
