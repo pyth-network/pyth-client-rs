@@ -20,18 +20,6 @@ use std::{
   str::FromStr
 };
 
-fn get_attr_str<'a,T>( ite: & mut T ) -> String
-where T : Iterator<Item=& 'a u8>
-{
-  let mut len = *ite.next().unwrap() as usize;
-  let mut val = String::with_capacity( len );
-  while len > 0 {
-    val.push( *ite.next().unwrap() as char );
-    len -= 1;
-  }
-  return val
-}
-
 fn get_price_type( ptype: &PriceType ) -> &'static str
 {
   match ptype {
@@ -78,13 +66,8 @@ fn main() {
 
       // print key and reference data for this Product
       println!( "product_account .. {:?}", prod_pkey );
-      let mut psz = prod_acct.size as usize - PROD_HDR_SIZE;
-      let mut pit = (&prod_acct.attr[..]).iter();
-      while psz > 0 {
-        let key = get_attr_str( &mut pit );
-        let val = get_attr_str( &mut pit );
+      for (key, val) in prod_acct.iter() {
         println!( "  {:.<16} {}", key, val );
-        psz -= 2 + key.len() + val.len();
       }
 
       // print all Prices that correspond to this Product

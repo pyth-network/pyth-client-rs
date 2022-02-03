@@ -128,6 +128,12 @@ pub struct Product
   pub attr       : [u8;PROD_ATTR_SIZE]
 }
 
+impl Product {
+    pub fn iter(&self) -> AttributeIter {
+        AttributeIter { attrs: &self.attr }
+    }
+}
+
 #[cfg(target_endian = "little")]
 unsafe impl Zeroable for Product {}
 
@@ -386,4 +392,34 @@ pub fn load_price(data: &[u8]) -> Result<&Price, PythError> {
   }
 
   return Ok(pyth_price);
+}
+
+struct AttributeIter<'a> {
+    attrs: &'a [u8],
+}
+
+impl<'a> Iterator for AttributeIter<'a> {
+    type Item = (&'a str, &'a str);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.attrs.is_empty() {
+            return None;
+        }
+        let (key, data) = get_attr_str(self.attrs);
+        let (val, data) = get_attr_str(data);
+        self.attrs = data;
+        return Some((key, val));
+    }
+}
+// example usage of pyth-client account structure
+// bootstrap all product and pricing accounts from root mapping account
+
+fn get_attr_str(buf: &[u8]) -> (&str, &[u8]) {
+    if buf.is_empty() {
+        return ("", &[]);
+    }
+    let len = buf[0] as usize;
+    let str = std::str::from_utf8(&buf[1..len + 1]).expect("attr should be ascii or utf-8");
+    let remaining_buf = &buf[len + 1..];
+    (str, remaining_buf)
 }
