@@ -411,8 +411,6 @@ impl<'a> Iterator for AttributeIter<'a> {
         return Some((key, val));
     }
 }
-// example usage of pyth-client account structure
-// bootstrap all product and pricing accounts from root mapping account
 
 fn get_attr_str(buf: &[u8]) -> (&str, &[u8]) {
     if buf.is_empty() {
