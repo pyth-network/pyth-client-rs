@@ -1,10 +1,7 @@
 use {
     pyth_client::{id, instruction, PriceConf},
     pyth_client::processor::process_instruction,
-    solana_program::{
-        instruction::Instruction,
-        pubkey::Pubkey,
-    },
+    solana_program::instruction::Instruction,
     solana_program_test::*,
     solana_sdk::{signature::Signer, transaction::Transaction},
 };
