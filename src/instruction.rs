@@ -34,6 +34,10 @@ pub enum PythClientInstruction {
   ///
   /// No accounts required for this instruction
   Noop,
+
+  PriceNotStale {
+    price_account_data: Vec<u8>
+  }
 }
 
 pub fn divide(numerator: PriceConf, denominator: PriceConf) -> Instruction {
@@ -92,5 +96,16 @@ pub fn noop() -> Instruction {
     program_id: id(),
     accounts: vec![],
     data: PythClientInstruction::Noop.try_to_vec().unwrap(),
+  }
+}
+
+// Returns ok if price is not stale
+pub fn price_not_stale(price_account_data: Vec<u8>) -> Instruction {
+  Instruction {
+    program_id: id(), 
+    accounts: vec![],
+    data: PythClientInstruction::PriceNotStale { price_account_data }
+      .try_to_vec()
+      .unwrap(),
   }
 }

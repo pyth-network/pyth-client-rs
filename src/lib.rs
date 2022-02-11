@@ -18,15 +18,19 @@ use bytemuck::{
   Pod, PodCastError, Zeroable,
 };
 
+#[cfg(target_arch = "bpf")]
+use solana_program::{clock::Clock, sysvar::Sysvar};
+
 solana_program::declare_id!("PythC11111111111111111111111111111111111111");
 
-pub const MAGIC          : u32   = 0xa1b2c3d4;
-pub const VERSION_2      : u32   = 2;
-pub const VERSION        : u32   = VERSION_2;
-pub const MAP_TABLE_SIZE : usize = 640;
-pub const PROD_ACCT_SIZE : usize = 512;
-pub const PROD_HDR_SIZE  : usize = 48;
-pub const PROD_ATTR_SIZE : usize = PROD_ACCT_SIZE - PROD_HDR_SIZE;
+pub const MAGIC            : u32   = 0xa1b2c3d4;
+pub const VERSION_2        : u32   = 2;
+pub const VERSION          : u32   = VERSION_2;
+pub const MAP_TABLE_SIZE   : usize = 640;
+pub const PROD_ACCT_SIZE   : usize = 512;
+pub const PROD_HDR_SIZE    : usize = 48;
+pub const PROD_ATTR_SIZE   : usize = PROD_ACCT_SIZE - PROD_HDR_SIZE;
+pub const MAX_SEND_LATENCY : u64   = 25; 
 
 /// The type of Pyth account determines what data it contains
 #[derive(Copy, Clone)]
@@ -180,15 +184,15 @@ pub struct Ema
   /// The current value of the EMA
   pub val        : i64,
   /// numerator state for next update
-  numer          : i64,
+  pub numer          : i64,
   /// denominator state for next update
-  denom          : i64
+  pub denom          : i64
 }
 
 /// Price accounts represent a continuously-updating price feed for a product.
 #[derive(Copy, Clone)]
 #[repr(C)]
-pub struct Price
+pub struct PriceAccountData
 {
   /// pyth magic number
   pub magic      : u32,
@@ -235,14 +239,71 @@ pub struct Price
   /// price components one per quoter
   pub comp       : [PriceComp;32]
 }
+#[derive(Copy, Clone)]
+#[repr(C)]
+pub struct Price {
+    /// account type
+    pub atype      : u32,
+    /// price account size
+    pub size       : u32,
+    /// price or calculation type
+    pub ptype      : PriceType,
+    /// price exponent
+    pub expo       : i32,
+    /// number of component prices
+    pub num        : u32,
+    /// number of quoters that make up aggregate
+    pub num_qt     : u32,
+    /// slot of last valid (not unknown) aggregate price
+    pub last_slot  : u64,
+    /// valid slot-time of agg. price
+    pub valid_slot : u64,
+    /// time-weighted average price
+    pub twap       : Ema,
+    /// time-weighted average confidence interval
+    pub twac       : Ema,
+    /// product account key
+    pub prod       : AccKey,
+    /// next Price account in linked list
+    pub next       : AccKey,
+    /// valid slot of previous update
+    pub prev_slot  : u64,
+    /// aggregate price of previous update
+    pub prev_price : i64,
+    /// confidence interval of previous update
+    pub prev_conf  : u64,
+    /// aggregate price info
+    pub agg        : PriceInfo,
+}
 
 #[cfg(target_endian = "little")]
-unsafe impl Zeroable for Price {}
+unsafe impl Zeroable for PriceAccountData {}
 
 #[cfg(target_endian = "little")]
-unsafe impl Pod for Price {}
+unsafe impl Pod for PriceAccountData {}
 
 impl Price {
+  fn from_price_account_data(price_account_data: &PriceAccountData) -> Self {
+    Price {
+      atype: price_account_data.atype,
+      size: price_account_data.size,
+      ptype: price_account_data.ptype,
+      expo: price_account_data.expo,
+      num: price_account_data.num,
+      num_qt: price_account_data.num_qt,
+      last_slot: price_account_data.last_slot,
+      valid_slot: price_account_data.valid_slot,
+      twap: price_account_data.twap,
+      twac: price_account_data.twac,
+      prod: price_account_data.prod,
+      next: price_account_data.next,
+      prev_slot: price_account_data.prev_slot,
+      prev_price: price_account_data.prev_price,
+      prev_conf: price_account_data.prev_conf,
+      agg: price_account_data.agg
+    }
+  }
+
   /**
    * Get the current price and confidence interval as fixed-point numbers of the form a * 10^e.
    * Returns a struct containing the current price, confidence interval, and the exponent for both
@@ -378,17 +439,36 @@ pub fn load_product(data: &[u8]) -> Result<&Product, PythError> {
 }
 
 /** Get a `Price` account from the raw byte value of a Solana account. */
-pub fn load_price(data: &[u8]) -> Result<&Price, PythError> {
-  let pyth_price = load::<Price>(&data).map_err(|_| PythError::InvalidAccountData)?;
+pub fn load_price_account_data(data: &[u8]) -> Result<&PriceAccountData, PythError> {
+  let price_account_data = load::<PriceAccountData>(&data).map_err(|_| PythError::InvalidAccountData)?;
 
-  if pyth_price.magic != MAGIC {
+  if price_account_data.magic != MAGIC {
     return Err(PythError::InvalidAccountData);
   }
-  if pyth_price.ver != VERSION_2 {
+  if price_account_data.ver != VERSION_2 {
     return Err(PythError::BadVersionNumber);
   }
-  if pyth_price.atype != AccountType::Price as u32 {
+  if price_account_data.atype != AccountType::Price as u32 {
     return Err(PythError::WrongAccountType);
+  }
+
+  return Ok(price_account_data);
+}
+
+/** Get a modified `Price` struct from the raw byte value of a Solana Price account.
+ *  If used on-chain it will update the status to unknown if price is not updated for a long time.
+*/
+pub fn load_price(data: &[u8]) -> Result<Price, PythError> {
+  let price_account_data = load_price_account_data(data)?;
+
+  #[allow(unused_mut)]
+  let mut pyth_price = Price::from_price_account_data(price_account_data);
+
+  #[cfg(target_arch = "bpf")]
+  if let PriceStatus::Trading = pyth_price.agg.status {
+    if Clock::get().unwrap().slot - pyth_price.agg.pub_slot > MAX_SEND_LATENCY {
+      pyth_price.agg.status = PriceStatus::Unknown;
+    }
   }
 
   return Ok(pyth_price);

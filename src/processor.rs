@@ -5,10 +5,11 @@ use solana_program::{
   account_info::AccountInfo,
   entrypoint::ProgramResult,
   pubkey::Pubkey,
+  program_error::ProgramError
 };
 
 use crate::{
-  instruction::PythClientInstruction,
+  instruction::PythClientInstruction, load_price, PriceStatus,
 };
 
 pub fn process_instruction(
@@ -40,6 +41,16 @@ pub fn process_instruction(
     }
     PythClientInstruction::Noop => {
       Ok(())
+    }
+    PythClientInstruction::PriceNotStale { price_account_data } => {
+      let price = load_price(&price_account_data[..])?;
+      
+      match price.agg.status {
+        PriceStatus::Trading => {
+          Ok(())
+        }
+        _ => Err(ProgramError::Custom(0))
+      }
     }
   }
 }
