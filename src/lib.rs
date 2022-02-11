@@ -394,7 +394,7 @@ pub fn load_price(data: &[u8]) -> Result<&Price, PythError> {
   return Ok(pyth_price);
 }
 
-struct AttributeIter<'a> {
+pub struct AttributeIter<'a> {
     attrs: &'a [u8],
 }
 

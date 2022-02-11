@@ -7,8 +7,7 @@ use pyth_client::{
   CorpAction,
   load_mapping,
   load_product,
-  load_price,
-  PROD_HDR_SIZE
+  load_price
 };
 use solana_client::{
   rpc_client::RpcClient
