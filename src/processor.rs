@@ -45,7 +45,7 @@ pub fn process_instruction(
     PythClientInstruction::PriceNotStale { price_account_data } => {
       let price = load_price(&price_account_data[..])?;
       
-      match price.agg.status {
+      match price.get_current_status() {
         PriceStatus::Trading => {
           Ok(())
         }

@@ -2,7 +2,7 @@
 
 use {
     bytemuck::bytes_of,
-    pyth_client::{id, MAGIC, VERSION_2, instruction, PriceType, PriceAccountData, AccountType, AccKey, Ema, PriceComp, PriceInfo, CorpAction, PriceStatus},
+    pyth_client::{id, MAGIC, VERSION_2, instruction, PriceType, Price, AccountType, AccKey, Ema, PriceComp, PriceInfo, CorpAction, PriceStatus},
     pyth_client::processor::process_instruction,
     solana_program::instruction::Instruction,
     solana_program_test::*,
@@ -25,7 +25,7 @@ async fn test_instr(instr: Instruction) -> Result<(), TransportError> {
     banks_client.process_transaction(transaction).await
 }
 
-fn price_all_zero() -> PriceAccountData {
+fn price_all_zero() -> Price {
     let acc_key = AccKey {
         val: [0; 32]
     };
@@ -50,7 +50,7 @@ fn price_all_zero() -> PriceAccountData {
         publisher: acc_key
     };
 
-    PriceAccountData {
+    Price {
         magic: MAGIC,
         ver: VERSION_2,
         atype: AccountType::Price as u32,
