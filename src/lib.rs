@@ -396,19 +396,19 @@ pub fn load_product(data: &[u8]) -> Result<&Product, PythError> {
 
 /** Get a `Price` account from the raw byte value of a Solana account. */
 pub fn load_price(data: &[u8]) -> Result<&Price, PythError> {
-  let price = load::<Price>(&data).map_err(|_| PythError::InvalidAccountData)?;
+  let pyth_price = load::<Price>(&data).map_err(|_| PythError::InvalidAccountData)?;
 
-  if price.magic != MAGIC {
+  if pyth_price.magic != MAGIC {
     return Err(PythError::InvalidAccountData);
   }
-  if price.ver != VERSION_2 {
+  if pyth_price.ver != VERSION_2 {
     return Err(PythError::BadVersionNumber);
   }
-  if price.atype != AccountType::Price as u32 {
+  if pyth_price.atype != AccountType::Price as u32 {
     return Err(PythError::WrongAccountType);
   }
 
-  return Ok(price);
+  return Ok(pyth_price);
 }
 
 
