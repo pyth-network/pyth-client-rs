@@ -6,7 +6,8 @@ use {
     solana_sdk::{signature::Signer, transaction::Transaction},
 };
 
-pub async fn test_instr(instr: Instruction) {
+// Panics if running instruction fails
+pub async fn test_instr_exec_ok(instr: Instruction) {
     let (mut banks_client, payer, recent_blockhash) = ProgramTest::new(
         "pyth_client",
         id(),

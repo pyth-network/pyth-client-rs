@@ -69,7 +69,9 @@ println!("price: ({} +- {}) x 10^{}", price.price, price.conf, price.expo);
 
 The price is returned along with a confidence interval that represents the degree of uncertainty in the price.
 Both values are represented as fixed-point numbers, `a * 10^e`. 
-The method will return `None` if the price is not currently available based on the price status. Get the current price status:
+The method will return `None` if the price is not currently available.
+
+The status of the price feed determines if the price is available. You can get the current status using:
 
 ```rust
 let price_status: PriceStatus = price_account.get_current_status();

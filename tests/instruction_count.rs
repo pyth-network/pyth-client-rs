@@ -4,7 +4,7 @@ use {
 };
 
 mod common;
-use common::test_instr;
+use common::test_instr_exec_ok;
 
 fn pc(price: i64, conf: u64, expo: i32) -> PriceConf {
     PriceConf {
@@ -16,47 +16,47 @@ fn pc(price: i64, conf: u64, expo: i32) -> PriceConf {
 
 #[tokio::test]
 async fn test_noop() {
-    test_instr(instruction::noop()).await;
+    test_instr_exec_ok(instruction::noop()).await;
 }
 
 #[tokio::test]
 async fn test_scale_to_exponent_down() {
-    test_instr(instruction::scale_to_exponent(pc(1, u64::MAX, -1000), 1000)).await
+    test_instr_exec_ok(instruction::scale_to_exponent(pc(1, u64::MAX, -1000), 1000)).await
 }
 
 #[tokio::test]
 async fn test_scale_to_exponent_up() {
-    test_instr(instruction::scale_to_exponent(pc(1, u64::MAX, 1000), -1000)).await
+    test_instr_exec_ok(instruction::scale_to_exponent(pc(1, u64::MAX, 1000), -1000)).await
 }
 
 #[tokio::test]
 async fn test_scale_to_exponent_best_case() {
-    test_instr(instruction::scale_to_exponent(pc(1, u64::MAX, 10), 10)).await
+    test_instr_exec_ok(instruction::scale_to_exponent(pc(1, u64::MAX, 10), 10)).await
 }
 
 #[tokio::test]
 async fn test_normalize_max_conf() {
-    test_instr(instruction::normalize(pc(1, u64::MAX, 0))).await
+    test_instr_exec_ok(instruction::normalize(pc(1, u64::MAX, 0))).await
 }
 
 #[tokio::test]
 async fn test_normalize_max_price() {
-    test_instr(instruction::normalize(pc(i64::MAX, 1, 0))).await
+    test_instr_exec_ok(instruction::normalize(pc(i64::MAX, 1, 0))).await
 }
 
 #[tokio::test]
 async fn test_normalize_min_price() {
-    test_instr(instruction::normalize(pc(i64::MIN, 1, 0))).await
+    test_instr_exec_ok(instruction::normalize(pc(i64::MIN, 1, 0))).await
 }
 
 #[tokio::test]
 async fn test_normalize_best_case() {
-    test_instr(instruction::normalize(pc(1, 1, 0))).await
+    test_instr_exec_ok(instruction::normalize(pc(1, 1, 0))).await
 }
 
 #[tokio::test]
 async fn test_div_max_price() {
-    test_instr(instruction::divide(
+    test_instr_exec_ok(instruction::divide(
         pc(i64::MAX, 1, 0),
         pc(1, 1, 0)
     )).await;
@@ -64,7 +64,7 @@ async fn test_div_max_price() {
 
 #[tokio::test]
 async fn test_div_max_price_2() {
-    test_instr(instruction::divide(
+    test_instr_exec_ok(instruction::divide(
         pc(i64::MAX, 1, 0),
         pc(i64::MAX, 1, 0)
     )).await;
@@ -72,7 +72,7 @@ async fn test_div_max_price_2() {
 
 #[tokio::test]
 async fn test_mul_max_price() {
-    test_instr(instruction::multiply(
+    test_instr_exec_ok(instruction::multiply(
         pc(i64::MAX, 1, 2),
         pc(123, 1, 2),
     )).await;
@@ -80,7 +80,7 @@ async fn test_mul_max_price() {
 
 #[tokio::test]
 async fn test_mul_max_price_2() {
-    test_instr(instruction::multiply(
+    test_instr_exec_ok(instruction::multiply(
         pc(i64::MAX, 1, 2),
         pc(i64::MAX, 1, 2),
     )).await;

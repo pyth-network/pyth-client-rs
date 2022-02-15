@@ -38,8 +38,8 @@ pub enum PythClientInstruction {
   Noop,
 
   PriceStatusCheck {
-    // Adding Borsh SerDe can be expensive (Price Account is big) and requires to add Borsh SerDe, Debug, Default to all structs
-    // (also in enum Default is experimental which we should provide in another way). I think it's best to left structs intact for this purpose.
+    // A Price serialized as a vector of bytes. This field is stored as a vector of bytes (instead of a Price)
+    // so that we do not have to add Borsh serialization to all structs, which is expensive.
     price_account_data: Vec<u8>,  
     expected_price_status: PriceStatus
   }
@@ -104,7 +104,7 @@ pub fn noop() -> Instruction {
   }
 }
 
-// Returns ok if price is not stale
+// Returns ok if price account status matches given expected price status.
 pub fn price_status_check(price_account_data: Vec<u8>, expected_price_status: PriceStatus) -> Instruction {
   Instruction {
     program_id: id(), 
