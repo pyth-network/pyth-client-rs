@@ -9,7 +9,7 @@ use solana_program::{
 };
 
 use crate::{
-  instruction::PythClientInstruction, load_price, PriceStatus,
+  instruction::PythClientInstruction, load_price,
 };
 
 pub fn process_instruction(
@@ -42,14 +42,13 @@ pub fn process_instruction(
     PythClientInstruction::Noop => {
       Ok(())
     }
-    PythClientInstruction::PriceNotStale { price_account_data } => {
+    PythClientInstruction::PriceStatusCheck { price_account_data, expected_price_status } => {
       let price = load_price(&price_account_data[..])?;
       
-      match price.get_current_status() {
-        PriceStatus::Trading => {
-          Ok(())
-        }
-        _ => Err(ProgramError::Custom(0))
+      if price.get_current_status() == expected_price_status {
+        Ok(())
+      } else {
+        Err(ProgramError::Custom(0))
       }
     }
   }

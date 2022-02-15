@@ -2,28 +2,13 @@
 
 use {
     bytemuck::bytes_of,
-    pyth_client::{id, MAGIC, VERSION_2, instruction, PriceType, Price, AccountType, AccKey, Ema, PriceComp, PriceInfo, CorpAction, PriceStatus},
-    pyth_client::processor::process_instruction,
-    solana_program::instruction::Instruction,
+    pyth_client::{MAGIC, VERSION_2, instruction, PriceType, Price, AccountType, AccKey, Ema, PriceComp, PriceInfo, CorpAction, PriceStatus},
     solana_program_test::*,
-    solana_sdk::{signature::Signer, transaction::Transaction, transport::TransportError},
 };
 
-async fn test_instr(instr: Instruction) -> Result<(), TransportError> {
-    let (mut banks_client, payer, recent_blockhash) = ProgramTest::new(
-        "pyth_client",
-        id(),
-        processor!(process_instruction),
-    )
-        .start()
-        .await;
-    let mut transaction = Transaction::new_with_payer(
-        &[instr],
-        Some(&payer.pubkey()),
-    );
-    transaction.sign(&[&payer], recent_blockhash);
-    banks_client.process_transaction(transaction).await
-}
+
+mod common;
+use common::test_instr;
 
 fn price_all_zero() -> Price {
     let acc_key = AccKey {
@@ -81,7 +66,7 @@ fn price_all_zero() -> Price {
 async fn test_price_not_stale() {
     let mut price = price_all_zero();
     price.agg.status = PriceStatus::Trading;
-    test_instr(instruction::price_not_stale(bytes_of(&price).to_vec())).await.unwrap();
+    test_instr(instruction::price_status_check(bytes_of(&price).to_vec(), PriceStatus::Trading)).await;
 }
 
 
@@ -89,6 +74,9 @@ async fn test_price_not_stale() {
 async fn test_price_stale() {
     let mut price = price_all_zero();
     price.agg.status = PriceStatus::Trading;
-    price.agg.pub_slot = 100; // It will cause an overflow because this is bigger than Solana slot which is impossible in reality
-    test_instr(instruction::price_not_stale(bytes_of(&price).to_vec())).await.unwrap_err();
+    // Value 100 will cause an overflow because this is bigger than Solana slot in the test suite (its ~1-5).
+    // As the check will be 5u - 100u ~= 1e18 > MAX_SLOT_DIFFERENCE. It can only break when Solana slot in the test suite becomes 
+    // between 100 and 100+MAX_SLOT_DIFFERENCE.
+    price.agg.pub_slot = 100;
+    test_instr(instruction::price_status_check(bytes_of(&price).to_vec(), PriceStatus::Unknown)).await;
 }

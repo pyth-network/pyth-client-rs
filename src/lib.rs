@@ -13,6 +13,7 @@ pub mod processor;
 pub mod instruction;
 
 use std::mem::size_of;
+use borsh::{BorshSerialize, BorshDeserialize};
 use bytemuck::{
   cast_slice, from_bytes, try_cast_slice,
   Pod, PodCastError, Zeroable,
@@ -44,7 +45,7 @@ pub enum AccountType
 }
 
 /// The current status of a price feed.
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, BorshSerialize, BorshDeserialize, Debug)]
 #[repr(C)]
 pub enum PriceStatus
 {
@@ -150,11 +151,15 @@ unsafe impl Pod for Product {}
 #[repr(C)]
 pub struct PriceInfo
 {
-  /// the current price
+  /// the current price. 
+  /// For the aggregate price use price.get_current_price() whenever possible. It has more checks to make sure price is valid.
   pub price      : i64,
-  /// confidence interval around the price
+  /// confidence interval around the price.
+  /// For the aggregate confidence use price.get_current_price() whenever possible. It has more checks to make sure price is valid.
   pub conf       : u64,
-  /// status of price (Trading is valid)
+  /// status of price (Trading is valid).
+  /// For the aggregate status use price.get_current_status() whenever possible.
+  /// Price data can sometimes go stale and the function handles the status in such cases.
   pub status     : PriceStatus,
   /// notification of any corporate action
   pub corp_act   : CorpAction,
@@ -254,7 +259,7 @@ impl Price {
   pub fn get_current_status(&self) -> PriceStatus {
     #[cfg(target_arch = "bpf")]
     if matches!(self.agg.status, PriceStatus::Trading) &&
-      Clock::get().unwrap().slot - self.agg.pub_slot > MAX_SEND_LATENCY {
+      Clock::get().unwrap().slot - self.agg.pub_slot > MAX_SLOT_DIFFERENCE {
       return PriceStatus::Unknown;
     }
     self.agg.status

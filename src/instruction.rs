@@ -1,5 +1,7 @@
 //! Program instructions for end-to-end testing and instruction counts
 
+use crate::PriceStatus;
+
 use {
   crate::id,
   borsh::{BorshDeserialize, BorshSerialize},
@@ -35,8 +37,11 @@ pub enum PythClientInstruction {
   /// No accounts required for this instruction
   Noop,
 
-  PriceNotStale {
-    price_account_data: Vec<u8>
+  PriceStatusCheck {
+    // Adding Borsh SerDe can be expensive (Price Account is big) and requires to add Borsh SerDe, Debug, Default to all structs
+    // (also in enum Default is experimental which we should provide in another way). I think it's best to left structs intact for this purpose.
+    price_account_data: Vec<u8>,  
+    expected_price_status: PriceStatus
   }
 }
 
@@ -100,11 +105,11 @@ pub fn noop() -> Instruction {
 }
 
 // Returns ok if price is not stale
-pub fn price_not_stale(price_account_data: Vec<u8>) -> Instruction {
+pub fn price_status_check(price_account_data: Vec<u8>, expected_price_status: PriceStatus) -> Instruction {
   Instruction {
     program_id: id(), 
     accounts: vec![],
-    data: PythClientInstruction::PriceNotStale { price_account_data }
+    data: PythClientInstruction::PriceStatusCheck { price_account_data, expected_price_status }
       .try_to_vec()
       .unwrap(),
   }
