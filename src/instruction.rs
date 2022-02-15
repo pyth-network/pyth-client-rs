@@ -1,6 +1,8 @@
 //! Program instructions for end-to-end testing and instruction counts
 
-use crate::PriceStatus;
+use bytemuck::bytes_of;
+
+use crate::{PriceStatus, Price};
 
 use {
   crate::id,
@@ -105,11 +107,11 @@ pub fn noop() -> Instruction {
 }
 
 // Returns ok if price account status matches given expected price status.
-pub fn price_status_check(price_account_data: Vec<u8>, expected_price_status: PriceStatus) -> Instruction {
+pub fn price_status_check(price: &Price, expected_price_status: PriceStatus) -> Instruction {
   Instruction {
     program_id: id(), 
     accounts: vec![],
-    data: PythClientInstruction::PriceStatusCheck { price_account_data, expected_price_status }
+    data: PythClientInstruction::PriceStatusCheck { price_account_data: bytes_of(price).to_vec(), expected_price_status }
       .try_to_vec()
       .unwrap(),
   }
