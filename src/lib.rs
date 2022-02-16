@@ -24,13 +24,13 @@ use solana_program::{clock::Clock, sysvar::Sysvar};
 
 solana_program::declare_id!("PythC11111111111111111111111111111111111111");
 
-pub const MAGIC            : u32   = 0xa1b2c3d4;
-pub const VERSION_2        : u32   = 2;
-pub const VERSION          : u32   = VERSION_2;
-pub const MAP_TABLE_SIZE   : usize = 640;
-pub const PROD_ACCT_SIZE   : usize = 512;
-pub const PROD_HDR_SIZE    : usize = 48;
-pub const PROD_ATTR_SIZE   : usize = PROD_ACCT_SIZE - PROD_HDR_SIZE;
+pub const MAGIC               : u32   = 0xa1b2c3d4;
+pub const VERSION_2           : u32   = 2;
+pub const VERSION             : u32   = VERSION_2;
+pub const MAP_TABLE_SIZE      : usize = 640;
+pub const PROD_ACCT_SIZE      : usize = 512;
+pub const PROD_HDR_SIZE       : usize = 48;
+pub const PROD_ATTR_SIZE      : usize = PROD_ACCT_SIZE - PROD_HDR_SIZE;
 pub const MAX_SLOT_DIFFERENCE : u64   = 25; 
 
 /// The type of Pyth account determines what data it contains
