@@ -45,7 +45,7 @@ pub fn process_instruction(
     PythClientInstruction::PriceStatusCheck { price_account_data, expected_price_status } => {
       let price = load_price(&price_account_data[..])?;
       
-      if price.get_current_status() == expected_price_status {
+      if price.get_current_price_status() == expected_price_status {
         Ok(())
       } else {
         Err(ProgramError::Custom(0))

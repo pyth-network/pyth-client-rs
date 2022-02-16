@@ -256,7 +256,7 @@ impl Price {
    * Get the current status of the aggregate price.
    * If this lib is used on-chain it will mark price status as unknown if price has not been updated for a while.
    */
-  pub fn get_current_status(&self) -> PriceStatus {
+  pub fn get_current_price_status(&self) -> PriceStatus {
     #[cfg(target_arch = "bpf")]
     if matches!(self.agg.status, PriceStatus::Trading) &&
       Clock::get().unwrap().slot - self.agg.pub_slot > MAX_SLOT_DIFFERENCE {
@@ -271,7 +271,7 @@ impl Price {
    * numbers. Returns `None` if price information is currently unavailable for any reason.
    */
   pub fn get_current_price(&self) -> Option<PriceConf> {
-    if !matches!(self.get_current_status(), PriceStatus::Trading) {
+    if !matches!(self.get_current_price_status(), PriceStatus::Trading) {
       None
     } else {
       Some(PriceConf {

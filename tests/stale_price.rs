@@ -1,4 +1,4 @@
-#![cfg(feature = "test-bpf")] // This only runs on bpf
+#![cfg(feature = "test-bpf")] // Only runs on bpf, where solana programs run
 
 use {
     pyth_client::{MAGIC, VERSION_2, instruction, PriceType, Price, AccountType, AccKey, Ema, PriceComp, PriceInfo, CorpAction, PriceStatus},
