@@ -13,20 +13,25 @@ pub mod processor;
 pub mod instruction;
 
 use std::mem::size_of;
+use borsh::{BorshSerialize, BorshDeserialize};
 use bytemuck::{
   cast_slice, from_bytes, try_cast_slice,
   Pod, PodCastError, Zeroable,
 };
 
+#[cfg(target_arch = "bpf")]
+use solana_program::{clock::Clock, sysvar::Sysvar};
+
 solana_program::declare_id!("PythC11111111111111111111111111111111111111");
 
-pub const MAGIC          : u32   = 0xa1b2c3d4;
-pub const VERSION_2      : u32   = 2;
-pub const VERSION        : u32   = VERSION_2;
-pub const MAP_TABLE_SIZE : usize = 640;
-pub const PROD_ACCT_SIZE : usize = 512;
-pub const PROD_HDR_SIZE  : usize = 48;
-pub const PROD_ATTR_SIZE : usize = PROD_ACCT_SIZE - PROD_HDR_SIZE;
+pub const MAGIC               : u32   = 0xa1b2c3d4;
+pub const VERSION_2           : u32   = 2;
+pub const VERSION             : u32   = VERSION_2;
+pub const MAP_TABLE_SIZE      : usize = 640;
+pub const PROD_ACCT_SIZE      : usize = 512;
+pub const PROD_HDR_SIZE       : usize = 48;
+pub const PROD_ATTR_SIZE      : usize = PROD_ACCT_SIZE - PROD_HDR_SIZE;
+pub const MAX_SLOT_DIFFERENCE : u64   = 25; 
 
 /// The type of Pyth account determines what data it contains
 #[derive(Copy, Clone)]
@@ -40,7 +45,7 @@ pub enum AccountType
 }
 
 /// The current status of a price feed.
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, BorshSerialize, BorshDeserialize, Debug)]
 #[repr(C)]
 pub enum PriceStatus
 {
@@ -146,11 +151,15 @@ unsafe impl Pod for Product {}
 #[repr(C)]
 pub struct PriceInfo
 {
-  /// the current price
+  /// the current price. 
+  /// For the aggregate price use price.get_current_price() whenever possible. It has more checks to make sure price is valid.
   pub price      : i64,
-  /// confidence interval around the price
+  /// confidence interval around the price.
+  /// For the aggregate confidence use price.get_current_price() whenever possible. It has more checks to make sure price is valid.
   pub conf       : u64,
-  /// status of price (Trading is valid)
+  /// status of price (Trading is valid).
+  /// For the aggregate status use price.get_current_status() whenever possible.
+  /// Price data can sometimes go stale and the function handles the status in such cases.
   pub status     : PriceStatus,
   /// notification of any corporate action
   pub corp_act   : CorpAction,
@@ -180,9 +189,9 @@ pub struct Ema
   /// The current value of the EMA
   pub val        : i64,
   /// numerator state for next update
-  numer          : i64,
+  pub numer          : i64,
   /// denominator state for next update
-  denom          : i64
+  pub denom          : i64
 }
 
 /// Price accounts represent a continuously-updating price feed for a product.
@@ -244,12 +253,25 @@ unsafe impl Pod for Price {}
 
 impl Price {
   /**
+   * Get the current status of the aggregate price.
+   * If this lib is used on-chain it will mark price status as unknown if price has not been updated for a while.
+   */
+  pub fn get_current_price_status(&self) -> PriceStatus {
+    #[cfg(target_arch = "bpf")]
+    if matches!(self.agg.status, PriceStatus::Trading) &&
+      Clock::get().unwrap().slot - self.agg.pub_slot > MAX_SLOT_DIFFERENCE {
+      return PriceStatus::Unknown;
+    }
+    self.agg.status
+  }
+
+  /**
    * Get the current price and confidence interval as fixed-point numbers of the form a * 10^e.
    * Returns a struct containing the current price, confidence interval, and the exponent for both
    * numbers. Returns `None` if price information is currently unavailable for any reason.
    */
   pub fn get_current_price(&self) -> Option<PriceConf> {
-    if !matches!(self.agg.status, PriceStatus::Trading) {
+    if !matches!(self.get_current_price_status(), PriceStatus::Trading) {
       None
     } else {
       Some(PriceConf {
@@ -393,6 +415,7 @@ pub fn load_price(data: &[u8]) -> Result<&Price, PythError> {
 
   return Ok(pyth_price);
 }
+
 
 pub struct AttributeIter<'a> {
     attrs: &'a [u8],

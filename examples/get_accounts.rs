@@ -66,7 +66,9 @@ fn main() {
       // print key and reference data for this Product
       println!( "product_account .. {:?}", prod_pkey );
       for (key, val) in prod_acct.iter() {
-        println!( "  {:.<16} {}", key, val );
+        if key.len() > 0 {
+          println!( "  {:.<16} {}", key, val );
+        }
       }
 
       // print all Prices that correspond to this Product
@@ -92,7 +94,7 @@ fn main() {
 
           println!( "    price_type ... {}", get_price_type(&pa.ptype));
           println!( "    exponent ..... {}", pa.expo );
-          println!( "    status ....... {}", get_status(&pa.agg.status));
+          println!( "    status ....... {}", get_status(&pa.get_current_price_status()));
           println!( "    corp_act ..... {}", get_corp_act(&pa.agg.corp_act));
 
           println!( "    num_qt ....... {}", pa.num_qt );

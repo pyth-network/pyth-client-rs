@@ -5,10 +5,11 @@ use solana_program::{
   account_info::AccountInfo,
   entrypoint::ProgramResult,
   pubkey::Pubkey,
+  program_error::ProgramError
 };
 
 use crate::{
-  instruction::PythClientInstruction,
+  instruction::PythClientInstruction, load_price,
 };
 
 pub fn process_instruction(
@@ -40,6 +41,15 @@ pub fn process_instruction(
     }
     PythClientInstruction::Noop => {
       Ok(())
+    }
+    PythClientInstruction::PriceStatusCheck { price_account_data, expected_price_status } => {
+      let price = load_price(&price_account_data[..])?;
+      
+      if price.get_current_price_status() == expected_price_status {
+        Ok(())
+      } else {
+        Err(ProgramError::Custom(0))
+      }
     }
   }
 }

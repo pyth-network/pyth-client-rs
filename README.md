@@ -71,6 +71,12 @@ The price is returned along with a confidence interval that represents the degre
 Both values are represented as fixed-point numbers, `a * 10^e`. 
 The method will return `None` if the price is not currently available.
 
+The status of the price feed determines if the price is available. You can get the current status using:
+
+```rust
+let price_status: PriceStatus = price_account.get_current_price_status();
+```
+
 ### Non-USD prices 
 
 Most assets in Pyth are priced in USD.
