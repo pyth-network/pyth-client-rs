@@ -1,7 +1,7 @@
 [package]
 name = "pyth-client"
-version = "0.3.0"
-authors = ["Richard Brooks"]
+version = "0.4.0"
+authors = ["Pyth Data Foundation"]
 edition = "2018"
 license = "Apache-2.0"
 homepage = "https://pyth.network"
