@@ -21,6 +21,13 @@ Add a dependency to your Cargo.toml:
 pyth-client="<version>"
 ```
 
+If you want to use this library in your on-chain program you should use `no-entrypoint` feature to prevent conflict between your program and this library's program.
+
+```toml
+[dependencies]
+pyth-client = {version = "<version>", features = ["no-entrypoint"]}
+```
+
 See [pyth-client on crates.io](https://crates.io/crates/pyth-client/) to get the latest version of the library.
 
 ## Usage
