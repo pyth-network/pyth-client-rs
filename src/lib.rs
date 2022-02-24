@@ -34,7 +34,7 @@ pub const PROD_ATTR_SIZE      : usize = PROD_ACCT_SIZE - PROD_HDR_SIZE;
 pub const MAX_SLOT_DIFFERENCE : u64   = 25; 
 
 /// The type of Pyth account determines what data it contains
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, serde::Serialize, serde::Deserialize)]
 #[repr(C)]
 pub enum AccountType
 {
@@ -44,8 +44,14 @@ pub enum AccountType
   Price
 }
 
+impl Default for AccountType {
+  fn default() -> Self {
+    AccountType::Unknown
+  }
+}
+
 /// The current status of a price feed.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, serde::Serialize, serde::Deserialize)]
 #[repr(C)]
 pub enum PriceStatus
 {
@@ -67,7 +73,7 @@ impl Default for PriceStatus {
 
 /// Status of any ongoing corporate actions.
 /// (still undergoing dev)
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, serde::Serialize, serde::Deserialize)]
 #[repr(C)]
 pub enum CorpAction
 {
@@ -81,7 +87,7 @@ impl Default for CorpAction {
 }
 
 /// The type of prices associated with a product -- each product may have multiple price feeds of different types.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, serde::Serialize, serde::Deserialize)]
 #[repr(C)]
 pub enum PriceType
 {
@@ -96,7 +102,7 @@ impl Default for PriceType {
 }
 
 /// Public key of a Solana account
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, BorshSerialize, BorshDeserialize, serde::Serialize, serde::Deserialize)]
 #[repr(C)]
 pub struct AccKey
 {
@@ -165,7 +171,7 @@ unsafe impl Pod for Product {}
 
 /// A price and confidence at a specific slot. This struct can represent either a
 /// publisher's contribution or the outcome of price aggregation.
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, BorshSerialize, BorshDeserialize, serde::Serialize, serde::Deserialize)]
 #[repr(C)]
 pub struct PriceInfo
 {
@@ -185,7 +191,7 @@ pub struct PriceInfo
 }
 
 /// The price and confidence contributed by a specific publisher.
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, BorshSerialize, BorshDeserialize, serde::Serialize, serde::Deserialize)]
 #[repr(C)]
 pub struct PriceComp
 {
@@ -200,7 +206,7 @@ pub struct PriceComp
 }
 
 /// An exponentially-weighted moving average.
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, BorshSerialize, BorshDeserialize, serde::Serialize, serde::Deserialize)]
 #[repr(C)]
 pub struct Ema
 {
@@ -350,7 +356,7 @@ impl Price {
   }
 }
 
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 struct AccKeyU64
 {
   pub val: [u64;4]
