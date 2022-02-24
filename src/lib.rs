@@ -34,7 +34,7 @@ pub const PROD_ATTR_SIZE      : usize = PROD_ACCT_SIZE - PROD_HDR_SIZE;
 pub const MAX_SLOT_DIFFERENCE : u64   = 25; 
 
 /// The type of Pyth account determines what data it contains
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, serde::Serialize, serde::Deserialize)]
 #[repr(C)]
 pub enum AccountType
 {
@@ -44,8 +44,14 @@ pub enum AccountType
   Price
 }
 
+impl Default for AccountType {
+  fn default() -> Self {
+    AccountType::Unknown
+  }
+}
+
 /// The current status of a price feed.
-#[derive(Copy, Clone, PartialEq, BorshSerialize, BorshDeserialize, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, serde::Serialize, serde::Deserialize)]
 #[repr(C)]
 pub enum PriceStatus
 {
@@ -59,17 +65,29 @@ pub enum PriceStatus
   Auction
 }
 
+impl Default for PriceStatus {
+  fn default() -> Self {
+      PriceStatus::Unknown
+  }
+}
+
 /// Status of any ongoing corporate actions.
 /// (still undergoing dev)
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, serde::Serialize, serde::Deserialize)]
 #[repr(C)]
 pub enum CorpAction
 {
   NoCorpAct
 }
 
+impl Default for CorpAction {
+  fn default() -> Self {
+      CorpAction::NoCorpAct
+  }
+}
+
 /// The type of prices associated with a product -- each product may have multiple price feeds of different types.
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, serde::Serialize, serde::Deserialize)]
 #[repr(C)]
 pub enum PriceType
 {
@@ -77,8 +95,14 @@ pub enum PriceType
   Price
 }
 
+impl Default for PriceType {
+  fn default() -> Self {
+      PriceType::Unknown
+  }
+}
+
 /// Public key of a Solana account
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, BorshSerialize, BorshDeserialize, serde::Serialize, serde::Deserialize)]
 #[repr(C)]
 pub struct AccKey
 {
@@ -86,7 +110,7 @@ pub struct AccKey
 }
 
 /// Mapping accounts form a linked-list containing the listing of all products on Pyth.
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[repr(C)]
 pub struct Mapping
 {
@@ -115,7 +139,7 @@ unsafe impl Pod for Mapping {}
 
 /// Product accounts contain metadata for a single product, such as its symbol ("Crypto.BTC/USD")
 /// and its base/quote currencies.
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[repr(C)]
 pub struct Product
 {
@@ -147,7 +171,7 @@ unsafe impl Pod for Product {}
 
 /// A price and confidence at a specific slot. This struct can represent either a
 /// publisher's contribution or the outcome of price aggregation.
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, BorshSerialize, BorshDeserialize, serde::Serialize, serde::Deserialize)]
 #[repr(C)]
 pub struct PriceInfo
 {
@@ -167,7 +191,7 @@ pub struct PriceInfo
 }
 
 /// The price and confidence contributed by a specific publisher.
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, BorshSerialize, BorshDeserialize, serde::Serialize, serde::Deserialize)]
 #[repr(C)]
 pub struct PriceComp
 {
@@ -182,7 +206,7 @@ pub struct PriceComp
 }
 
 /// An exponentially-weighted moving average.
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, BorshSerialize, BorshDeserialize, serde::Serialize, serde::Deserialize)]
 #[repr(C)]
 pub struct Ema
 {
@@ -195,7 +219,7 @@ pub struct Ema
 }
 
 /// Price accounts represent a continuously-updating price feed for a product.
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 #[repr(C)]
 pub struct Price
 {
@@ -332,7 +356,7 @@ impl Price {
   }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 struct AccKeyU64
 {
   pub val: [u64;4]

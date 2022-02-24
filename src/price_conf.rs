@@ -27,7 +27,7 @@ const MAX_PD_V_U64: u64 = (1 << 28) - 1;
  * small that the price does not fit into an i64). Users of these methods should (1) select
  * their exponents to avoid this problem, and (2) handle the `None` case gracefully.
  */
-#[derive(PartialEq, Debug, BorshSerialize, BorshDeserialize, Clone)]
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, serde::Serialize, serde::Deserialize)]
 pub struct PriceConf {
   pub price: i64,
   pub conf: u64,
