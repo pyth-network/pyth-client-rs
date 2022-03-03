@@ -130,25 +130,25 @@ cargo run --example get_accounts
 The output of this command is a listing of Pyth's accounts, such as:
 
 ```
-product_account .. 6MEwdxe4g1NeAF9u6KDG14anJpFsVEa2cvr5H6iriFZ8
-  symbol.......... SRM/USD
-  asset_type...... Crypto
-  quote_currency.. USD
-  description..... SRM/USD
-  generic_symbol.. SRMUSD
-  base............ SRM
-  price_account .. 992moaMQKs32GKZ9dxi8keyM2bUmbrwBZpK4p2K6X5Vs
-    price ........ 7398000000
-    conf ......... 3200000
-    price_type ... price
-    exponent ..... -9
-    status ....... trading
-    corp_act ..... nocorpact
-    num_qt ....... 1
-    valid_slot ... 91340924
-    publish_slot . 91340925
-    twap ......... 7426390900
-    twac ......... 2259870
+product_account ............ 6MEwdxe4g1NeAF9u6KDG14anJpFsVEa2cvr5H6iriFZ8
+  symbol.................... SRM/USD
+  asset_type................ Crypto
+  quote_currency............ USD
+  description............... SRM/USD
+  generic_symbol............ SRMUSD
+  base...................... SRM
+  price_account ............ 992moaMQKs32GKZ9dxi8keyM2bUmbrwBZpK4p2K6X5Vs
+    price .................. 7398000000
+    conf ................... 3200000
+    price_type ............. price
+    exponent ............... -9
+    status ................. trading
+    corp_act ............... nocorpact
+    num_qt ................. 1
+    valid_slot ............. 91340924
+    publish_slot ........... 91340925
+    ema_price .............. 7426390900
+    ema_confidence ......... 2259870
 ```
 
 ## Development

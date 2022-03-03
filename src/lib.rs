@@ -224,49 +224,49 @@ pub struct Ema
 pub struct Price
 {
   /// pyth magic number
-  pub magic      : u32,
+  pub magic          : u32,
   /// program version
-  pub ver        : u32,
+  pub ver            : u32,
   /// account type
-  pub atype      : u32,
+  pub atype          : u32,
   /// price account size
-  pub size       : u32,
+  pub size           : u32,
   /// price or calculation type
-  pub ptype      : PriceType,
+  pub ptype          : PriceType,
   /// price exponent
-  pub expo       : i32,
+  pub expo           : i32,
   /// number of component prices
-  pub num        : u32,
+  pub num            : u32,
   /// number of quoters that make up aggregate
-  pub num_qt     : u32,
+  pub num_qt         : u32,
   /// slot of last valid (not unknown) aggregate price
-  pub last_slot  : u64,
+  pub last_slot      : u64,
   /// valid slot-time of agg. price
-  pub valid_slot : u64,
-  /// time-weighted average price
-  pub twap       : Ema,
-  /// time-weighted average confidence interval
-  pub twac       : Ema,
+  pub valid_slot     : u64,
+  /// exponential moving average price
+  pub ema_price      : Ema,
+  /// exponential moving average confidence interval
+  pub ema_confidence : Ema,
   /// space for future derived values
-  pub drv1       : i64,
+  pub drv1           : i64,
   /// space for future derived values
-  pub drv2       : i64,
+  pub drv2           : i64,
   /// product account key
-  pub prod       : AccKey,
+  pub prod           : AccKey,
   /// next Price account in linked list
-  pub next       : AccKey,
+  pub next           : AccKey,
   /// valid slot of previous update
-  pub prev_slot  : u64,
+  pub prev_slot      : u64,
   /// aggregate price of previous update
-  pub prev_price : i64,
+  pub prev_price     : i64,
   /// confidence interval of previous update
-  pub prev_conf  : u64,
+  pub prev_conf      : u64,
   /// space for future derived values
-  pub drv3       : i64,
+  pub drv3           : i64,
   /// aggregate price info
-  pub agg        : PriceInfo,
+  pub agg            : PriceInfo,
   /// price components one per quoter
-  pub comp       : [PriceComp;32]
+  pub comp           : [PriceComp;32]
 }
 
 #[cfg(target_endian = "little")]
@@ -307,16 +307,16 @@ impl Price {
   }
 
   /**
-   * Get the time-weighted average price (TWAP) and a confidence interval on the result.
-   * Returns `None` if the twap is currently unavailable.
+   * Get the exponential moving average price (ema_price) and a confidence interval on the result.
+   * Returns `None` if the ema_price is currently unavailable.
    *
    * At the moment, the confidence interval returned by this method is computed in
    * a somewhat questionable way, so we do not recommend using it for high-value applications.
    */
-  pub fn get_twap(&self) -> Option<PriceConf> {
+  pub fn get_ema_price(&self) -> Option<PriceConf> {
     // This method currently cannot return None, but may do so in the future.
-    // Note that the twac is a positive number in i64, so safe to cast to u64.
-    Some(PriceConf { price: self.twap.val, conf: self.twac.val as u64, expo: self.expo })
+    // Note that the ema_confidence is a positive number in i64, so safe to cast to u64.
+    Some(PriceConf { price: self.ema_price.val, conf: self.ema_confidence.val as u64, expo: self.expo })
   }
 
   /**
