@@ -1,6 +1,6 @@
 # Pyth Client
 
-**This crate has deprecated. Please use [pyth-sdk-solana](https://github.com/pyth-network/pyth-sdk-rs/tree/main/pyth-sdk-solana) instead.**
+**This crate has deprecated. Please use [pyth-sdk-solana](https://github.com/pyth-network/pyth-sdk-rs/tree/main/pyth-sdk-solana) instead. pyth-sdk-solana provides identical functionalities with an easier interface.**
 
 This crate provides utilities for reading price feeds from the [pyth.network](https://pyth.network/) oracle on the Solana network.
 The crate includes a library for on-chain programs and an off-chain example program.
