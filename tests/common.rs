@@ -3,7 +3,7 @@ use {
     pyth_client::processor::process_instruction,
     solana_program::instruction::Instruction,
     solana_program_test::*,
-    solana_sdk::{signature::Signer, transaction::Transaction},
+    solana_sdk::{signature::Signer, transaction::Transaction, pubkey::Pubkey},
 };
 
 // Panics if running instruction fails
