@@ -110,6 +110,7 @@ pub struct AccKey
 }
 
 /// Mapping accounts form a linked-list containing the listing of all products on Pyth.
+#[deprecated = "This crate has deprecated. Please use pyth-sdk-solana"]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[repr(C)]
 pub struct Mapping
@@ -139,6 +140,7 @@ unsafe impl Pod for Mapping {}
 
 /// Product accounts contain metadata for a single product, such as its symbol ("Crypto.BTC/USD")
 /// and its base/quote currencies.
+#[deprecated = "This crate has deprecated. Please use pyth-sdk-solana"]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[repr(C)]
 pub struct Product
@@ -219,6 +221,7 @@ pub struct Ema
 }
 
 /// Price accounts represent a continuously-updating price feed for a product.
+#[deprecated = "This crate has deprecated. Please use pyth-sdk-solana"]
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 #[repr(C)]
 pub struct Price
@@ -390,6 +393,7 @@ fn load<T: Pod>(data: &[u8]) -> Result<&T, PodCastError> {
 }
 
 /** Get a `Mapping` account from the raw byte value of a Solana account. */
+#[deprecated = "This crate has deprecated. Please use pyth-sdk-solana"]
 pub fn load_mapping(data: &[u8]) -> Result<&Mapping, PythError> {
   let pyth_mapping = load::<Mapping>(&data).map_err(|_| PythError::InvalidAccountData)?;
 
@@ -407,6 +411,7 @@ pub fn load_mapping(data: &[u8]) -> Result<&Mapping, PythError> {
 }
 
 /** Get a `Product` account from the raw byte value of a Solana account. */
+#[deprecated = "This crate has deprecated. Please use pyth-sdk-solana"]
 pub fn load_product(data: &[u8]) -> Result<&Product, PythError> {
   let pyth_product = load::<Product>(&data).map_err(|_| PythError::InvalidAccountData)?;
 
@@ -424,6 +429,7 @@ pub fn load_product(data: &[u8]) -> Result<&Product, PythError> {
 }
 
 /** Get a `Price` account from the raw byte value of a Solana account. */
+#[deprecated = "This crate has deprecated. Please use pyth-sdk-solana"]
 pub fn load_price(data: &[u8]) -> Result<&Price, PythError> {
   let pyth_price = load::<Price>(&data).map_err(|_| PythError::InvalidAccountData)?;
 
