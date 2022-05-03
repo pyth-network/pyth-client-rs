@@ -1,6 +1,6 @@
 [package]
 name = "pyth-client"
-version = "0.5.0"
+version = "0.5.1"
 authors = ["Pyth Data Foundation"]
 edition = "2018"
 license = "Apache-2.0"
@@ -9,6 +9,9 @@ repository = "https://github.com/pyth-network/pyth-client-rs"
 description = "pyth price oracle data structures and example usage"
 keywords = [ "pyth", "solana", "oracle" ]
 readme = "README.md"
+
+[badges]
+maintenance = { status = "deprecated" }
 
 [features]
 test-bpf = []

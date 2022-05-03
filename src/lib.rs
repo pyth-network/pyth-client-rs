@@ -1,6 +1,7 @@
 //! A Rust library for consuming price feeds from the [pyth.network](https://pyth.network/) oracle on the Solana network.
 //!
 //! Please see the [crates.io page](https://crates.io/crates/pyth-client/) for documentation and example usage.
+#![deprecated = "This crate has been deprecated. Please use pyth-sdk-solana instead."]
 
 pub use self::price_conf::PriceConf;
 pub use self::error::PythError;
